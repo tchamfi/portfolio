@@ -74,9 +74,15 @@ Reponds au format JSON strict :
 def draft_response(job_analysis, matching, response_type="email"):
     client = Anthropic(api_key=_get_api_key())
     if response_type == "email":
-        instruction = "Redige un email de candidature professionnel, concis (max 250 mots). Signe : Lionel TCHAMFONG"
+        instruction = """Redige un email de candidature professionnel, concis (max 250 mots). Signe : Lionel TCHAMFONG.
+REGLES DE FORMAT STRICTES :
+- Texte brut uniquement. AUCUN markdown (pas de **, pas de -, pas de #, pas de ```).
+- Pas de listes a puces. Utilise des phrases et paragraphes naturels.
+- L'email doit pouvoir etre copie-colle directement dans Gmail sans caracteres speciaux.
+- Commence par Objet : puis le corps de l'email."""
     else:
-        instruction = "Redige un pitch oral de 2 minutes, confiant et concret."
+        instruction = """Redige un pitch oral de 2 minutes, confiant et concret.
+REGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes a puces, pas de caracteres speciaux."""
     response = client.messages.create(
         model="claude-sonnet-4-20250514", max_tokens=1500, system=instruction,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"}],

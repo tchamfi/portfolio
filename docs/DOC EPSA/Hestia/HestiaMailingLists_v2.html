@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hestia - Gestion des Mailing Lists</title>
+  <style>
+/* ============================================
+   HESTIA MAILING LISTS - STYLES
+   Version 2 - Janvier 2026
+   ============================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 14px;
+  color: #333;
+  background: #F5F7FA;
+  line-height: 1.5;
+}
+
+/* Header */
+.header {
+  background: #fff;
+  padding: 12px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #E0E0E0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logo-text {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2E7D32;
+}
+
+.logo-star {
+  font-size: 28px;
+  color: #FFD700;
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-name {
+  color: #666;
+  font-size: 14px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #E0E0E0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lang-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #E0E0E0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* Navigation */
+.navigation {
+  background: #fff;
+  padding: 16px 32px;
+  display: flex;
+  gap: 12px;
+  border-bottom: 1px solid #E0E0E0;
+  flex-wrap: wrap;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid #E0E0E0;
+  border-radius: 25px;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-btn:hover {
+  background: #F5F5F5;
+}
+
+.nav-btn.active {
+  border: 2px solid #4CAF50;
+  background: #E8F5E9;
+  color: #2E7D32;
+  font-weight: 600;
+}
+
+/* Main */
+.main-content {
+  min-height: calc(100vh - 130px);
+}
+
+/* Search Page */
+.search-page {
+  padding: 32px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 24px;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #333;
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.loader {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #E0E0E0;
+  border-top-color: #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.results-count {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  border: 1px solid #E0E0E0;
+  transition: all 0.2s;
+}
+
+.result-card:hover {
+  border-color: #4CAF50;
+  box-shadow: 0 4px 12px rgba(76,175,80,0.15);
+}
+
+.result-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.result-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #E3F2FD;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.result-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #333;
+}
+
+.result-email {
+  color: #666;
+  font-size: 13px;
+}
+
+.result-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* Badges */
+.badge-members {
+  background: #E8F5E9;
+  color: #2E7D32;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-members-lg {
+  background: #E8F5E9;
+  color: #2E7D32;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.badge-user {
+  background: #F5F5F5;
+  color: #666;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.badge-group {
+  background: #E3F2FD;
+  color: #1976D2;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.badge-inherited {
+  background: #FFF3E0;
+  color: #E65100;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+/* Detail Page */
+.detail-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+  display: none;
+}
+
+.detail-page.active {
+  display: block;
+}
+
+.detail-header {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-back {
+  background: none;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #666;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.btn-back:hover {
+  background: #F5F5F5;
+}
+
+.ml-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #E3F2FD;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.ml-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ml-email {
+  margin: 4px 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Tabs */
+.tabs-bar {
+  background: #fff;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid #E0E0E0;
+  display: flex;
+}
+
+.tab {
+  padding: 12px 24px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: #4CAF50;
+}
+
+.tab.active {
+  border-bottom-color: #4CAF50;
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.tab-content {
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  min-height: 400px;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+/* Form */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-width: 800px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-label {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+}
+
+.form-input,
+.form-textarea {
+  padding: 12px 16px;
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #333;
+  outline: none;
+  font-family: inherit;
+}
+
+.form-input.readonly,
+.form-textarea.readonly {
+  background: #F5F5F5;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #4CAF50;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2E7D32;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: #666;
+  border: 1px solid #E0E0E0;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #F5F5F5;
+}
+
+.btn-danger {
+  background: #fff;
+  color: #EF5350;
+  border: 1px solid #EF5350;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #FFEBEE;
+}
+
+.btn-danger-solid {
+  background: #EF5350;
+  color: #fff;
+}
+
+.btn-danger-solid:hover:not(:disabled) {
+  background: #D32F2F;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+}
+
+/* Alerts */
+.alert-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #E3F2FD;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: #1976D2;
+  font-size: 13px;
+}
+
+/* Actions Bar */
+.actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.actions-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.actions-right {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #F5F5F5;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.filter-input input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  width: 180px;
+}
+
+.members-count {
+  color: #666;
+  font-size: 13px;
+}
+
+/* Table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.data-table th {
+  background: #F5F5F5;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+}
+
+.data-table td {
+  font-size: 14px;
+  border-bottom: 1px solid #E0E0E0;
+}
+
+.data-table tr:hover td {
+  background: rgba(0,0,0,0.02);
+}
+
+.col-checkbox {
+  width: 40px;
+}
+
+.col-actions {
+  width: 80px;
+  text-align: center;
+}
+
+.text-muted {
+  color: #666;
+}
+
+.text-disabled {
+  color: #999;
+}
+
+/* Cards List */
+.cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: #FAFAFA;
+  border-radius: 6px;
+  border: 1px solid #E0E0E0;
+}
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #4CAF50;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.card-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.card-email {
+  color: #666;
+  font-size: 13px;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay.visible {
+  display: flex;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 12px;
+  width: 500px;
+  max-width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.modal-content.small {
+  width: 450px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #E0E0E0;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #999;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 24px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #E0E0E0;
+}
+
+.search-input-modal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #F5F5F5;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.search-input-modal input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+}
+
+.results-label {
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.result-item:hover {
+  border-color: #4CAF50;
+}
+
+.result-item.selected {
+  border-color: #4CAF50;
+  background: #E8F5E9;
+}
+
+.result-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #E0E0E0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.result-item-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.result-item-email {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .header, .navigation, .search-page, .detail-page {
+    padding: 12px 16px;
+  }
+  .tabs-bar {
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+  </style>
+</head>
+<body>
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-logo">
+      <span class="logo-text">epsa</span>
+      <span class="logo-star">*</span>
+    </div>
+    <div class="header-user">
+      <span class="user-name">lionel.tchamfong - Admin-Hestia</span>
+      <div class="user-avatar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="#666">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+      </div>
+      <div class="lang-selector">
+        <span>🇫🇷</span>
+        <span>FR</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- NAVIGATION -->
+  <nav class="navigation">
+    <button class="nav-btn" data-nav="onboarding">
+      <span>→</span>
+      <span>Liste d'Onboarding</span>
+    </button>
+    <button class="nav-btn" data-nav="offboarding">
+      <span>←</span>
+      <span>Liste d'Offboarding</span>
+    </button>
+    <button class="nav-btn" data-nav="collaborateurs">
+      <span>👥</span>
+      <span>Gestion des collaborateurs</span>
+    </button>
+    <button class="nav-btn active" data-nav="mailing-lists">
+      <span>✉️</span>
+      <span>Gestion des Mailing Lists</span>
+    </button>
+    <button class="nav-btn" data-nav="parametrage">
+      <span>⚙️</span>
+      <span>Paramétrage</span>
+    </button>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    <!-- SEARCH PAGE -->
+    <div id="searchPage" class="search-page">
+      <h1 class="page-title">Gestion des Mailing Lists</h1>
+      
+      <div class="search-bar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#999">
+          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="Rechercher une mailing list (nom ou email)...">
+        <div id="searchLoader" class="loader" style="display: none;"></div>
+      </div>
+
+      <div id="searchResults" class="results-container">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <p>Saisissez au moins 2 caractères pour rechercher une mailing list</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- DETAIL PAGE -->
+    <div id="detailPage" class="detail-page">
+      <div class="detail-header">
+        <div class="header-left">
+          <button id="btnBack" class="btn-back">← Retour</button>
+          <div class="ml-icon">✉️</div>
+          <div class="ml-info">
+            <h2 id="detailName" class="ml-name"></h2>
+            <p id="detailEmail" class="ml-email"></p>
+          </div>
+        </div>
+        <span id="detailMembersCount" class="badge-members-lg"></span>
+      </div>
+
+      <!-- Tabs (3 onglets) -->
+      <div class="tabs-bar">
+        <button class="tab active" data-tab="properties">📋 Propriétés</button>
+        <button class="tab" data-tab="members">👥 Membres</button>
+        <button class="tab" data-tab="owners">👤 Propriétaires</button>
+      </div>
+
+      <div class="tab-content">
+        <!-- Properties Tab (lecture seule) -->
+        <div id="tabProperties" class="tab-pane active">
+          <div class="alert-info">
+            <span>ℹ️</span>
+            <span>Les propriétés de la mailing list sont en lecture seule. Pour toute modification, veuillez contacter l'administrateur Azure AD.</span>
+          </div>
+          
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Nom du groupe</label>
+              <input type="text" id="inputName" class="form-input readonly" disabled>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Adresse e-mail</label>
+              <input type="text" id="inputEmail" class="form-input readonly" disabled>
+            </div>
+            <div class="form-group full-width">
+              <label class="form-label">Description</label>
+              <textarea id="inputDescription" class="form-textarea readonly" rows="3" disabled></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Members Tab -->
+        <div id="tabMembers" class="tab-pane">
+          <div class="actions-bar">
+            <div class="actions-left">
+              <div class="filter-input">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
+                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                <input type="text" id="filterMembers" placeholder="Filtrer les membres...">
+              </div>
+              <span id="membersCountLabel" class="members-count"></span>
+            </div>
+            <div class="actions-right">
+              <button id="btnDeleteSelected" class="btn btn-danger" style="display: none;">🗑️ Supprimer (<span id="selectedCount">0</span>)</button>
+              <button id="btnAddMember" class="btn btn-primary">+ Ajouter un membre</button>
+            </div>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="col-checkbox"><input type="checkbox" id="selectAllMembers"></th>
+                <th>Nom</th>
+                <th>Prénom</th>
+                <th>Email</th>
+                <th>Type</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="membersTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Owners Tab -->
+        <div id="tabOwners" class="tab-pane">
+          <div class="alert-info">
+            <span>ℹ️</span>
+            <span>Les propriétaires peuvent modifier les membres et les paramètres de cette mailing list.</span>
+          </div>
+
+          <div class="actions-bar">
+            <span id="ownersCountLabel" class="members-count"></span>
+            <button id="btnAddOwner" class="btn btn-primary">+ Ajouter un propriétaire</button>
+          </div>
+
+          <div id="ownersList" class="cards-list"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODALS -->
+  <!-- Add Member Modal -->
+  <div id="modalAddMember" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalAddTitle" class="modal-title">Ajouter un membre</h3>
+        <button class="modal-close" data-close="modalAddMember">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="search-input-modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#999">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+          <input type="text" id="modalSearchInput" placeholder="Rechercher un utilisateur ou un groupe...">
+        </div>
+        <div id="modalSearchResults" class="search-results"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalAddMember">Annuler</button>
+        <button id="btnConfirmAdd" class="btn btn-primary" disabled>Ajouter la sélection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Modal -->
+  <div id="modalConfirm" class="modal-overlay">
+    <div class="modal-content small">
+      <div class="modal-header">
+        <h3 id="confirmTitle" class="modal-title">Confirmer la suppression</h3>
+        <button class="modal-close" data-close="modalConfirm">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalConfirm">Annuler</button>
+        <button id="btnConfirmDelete" class="btn btn-danger-solid">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+// ============================================
+// MOCK DATA
+// ============================================
+const mockMailingLists = [
+  { id: '1', name: 'ML-RH', email: 'ml-rh@epsa.com', description: 'Liste de distribution pour le service Ressources Humaines', membersCount: 45 },
+  { id: '2', name: 'ML-IT-Support', email: 'ml-it-support@epsa.com', description: 'Liste de distribution pour le support informatique', membersCount: 12 },
+  { id: '3', name: 'ML-Direction', email: 'ml-direction@epsa.com', description: 'Liste de distribution pour la direction générale', membersCount: 8 },
+  { id: '4', name: 'ML-Marketing', email: 'ml-marketing@epsa.com', description: 'Liste de distribution pour le service Marketing et Communication', membersCount: 23 },
+  { id: '5', name: 'ML-Finance', email: 'ml-finance@epsa.com', description: 'Liste de distribution pour le service Finance et Comptabilité', membersCount: 15 },
+  { id: '6', name: 'ML-Commercial', email: 'ml-commercial@epsa.com', description: 'Liste de distribution pour les équipes commerciales', membersCount: 67 },
+  { id: '7', name: 'ML-Juridique', email: 'ml-juridique@epsa.com', description: 'Liste de distribution pour le service Juridique', membersCount: 6 },
+  { id: '8', name: 'ML-All-France', email: 'ml-all-france@epsa.com', description: 'Liste de distribution pour tous les collaborateurs France', membersCount: 234 },
+];
+
+const mockMembers = [
+  { id: '1', nom: 'Williams', prenom: 'John', email: 'john.williams@epsa.com', type: 'Utilisateur', inherited: false },
+  { id: '2', nom: 'Dupont', prenom: 'Marie', email: 'marie.dupont@epsa.com', type: 'Utilisateur', inherited: false },
+  { id: '3', nom: 'Martin', prenom: 'Pierre', email: 'pierre.martin@epsa.com', type: 'Utilisateur', inherited: true, inheritedFrom: 'GRP-Finance' },
+  { id: '4', nom: 'GRP-Finance', prenom: '', email: 'grp-finance@epsa.com', type: 'Groupe', inherited: false },
+  { id: '5', nom: 'Bernard', prenom: 'Sophie', email: 'sophie.bernard@epsa.com', type: 'Utilisateur', inherited: false },
+  { id: '6', nom: 'Lefebvre', prenom: 'Antoine', email: 'antoine.lefebvre@epsa.com', type: 'Utilisateur', inherited: false },
+  { id: '7', nom: 'Moreau', prenom: 'Julie', email: 'julie.moreau@epsa.com', type: 'Utilisateur', inherited: true, inheritedFrom: 'GRP-Finance' },
+  { id: '8', nom: 'Garcia', prenom: 'Lucas', email: 'lucas.garcia@epsa.com', type: 'Utilisateur', inherited: false },
+];
+
+const mockOwners = [
+  { id: '1', nom: 'Danou', prenom: 'Yann', email: 'yann.danou@epsa.com' },
+  { id: '2', nom: 'Monroig', prenom: 'Nicolas', email: 'nicolas.monroig@epsa.com' },
+];
+
+const mockSearchResults = [
+  { id: '10', name: 'Alice Martin', email: 'alice.martin@epsa.com', type: 'Utilisateur' },
+  { id: '11', name: 'Bob Johnson', email: 'bob.johnson@epsa.com', type: 'Utilisateur' },
+  { id: '12', name: 'Claire Dubois', email: 'claire.dubois@epsa.com', type: 'Utilisateur' },
+  { id: '13', name: 'GRP-Comptabilité', email: 'grp-compta@epsa.com', type: 'Groupe' },
+  { id: '14', name: 'David Petit', email: 'david.petit@epsa.com', type: 'Utilisateur' },
+  { id: '15', name: 'Emma Leroy', email: 'emma.leroy@epsa.com', type: 'Utilisateur' },
+];
+
+// ============================================
+// STATE
+// ============================================
+let currentMailingList = null;
+let selectedMemberIds = [];
+let modalSelectedIds = [];
+let currentModalMode = 'member';
+
+// ============================================
+// DOM ELEMENTS
+// ============================================
+const searchPage = document.getElementById('searchPage');
+const detailPage = document.getElementById('detailPage');
+const searchInput = document.getElementById('searchInput');
+const searchLoader = document.getElementById('searchLoader');
+const searchResults = document.getElementById('searchResults');
+const btnBack = document.getElementById('btnBack');
+
+// ============================================
+// INITIALIZATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+  initSearchPage();
+  initDetailPage();
+  initModals();
+});
+
+// ============================================
+// SEARCH PAGE
+// ============================================
+function initSearchPage() {
+  let searchTimeout = null;
+  searchInput.addEventListener('input', function() {
+    const query = this.value.trim();
+    clearTimeout(searchTimeout);
+    if (query.length < 2) {
+      renderEmptyState();
+      return;
+    }
+    searchLoader.style.display = 'block';
+    searchTimeout = setTimeout(() => {
+      const results = mockMailingLists.filter(ml => 
+        ml.name.toLowerCase().includes(query.toLowerCase()) ||
+        ml.email.toLowerCase().includes(query.toLowerCase())
+      );
+      searchLoader.style.display = 'none';
+      renderSearchResults(results);
+    }, 300);
+  });
+}
+
+function renderEmptyState() {
+  searchResults.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">🔍</div>
+      <p>Saisissez au moins 2 caractères pour rechercher une mailing list</p>
+    </div>
+  `;
+}
+
+function renderSearchResults(results) {
+  if (results.length === 0) {
+    searchResults.innerHTML = `
+      <p class="results-count">0 résultat(s) trouvé(s)</p>
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <p>Aucune mailing list trouvée</p>
+      </div>
+    `;
+    return;
+  }
+  searchResults.innerHTML = `
+    <p class="results-count">${results.length} résultat(s) trouvé(s)</p>
+    <div class="results-list">
+      ${results.map(ml => `
+        <div class="result-card" data-id="${ml.id}">
+          <div class="result-left">
+            <div class="result-icon">✉️</div>
+            <div class="result-info">
+              <div class="result-name">${ml.name}</div>
+              <div class="result-email">${ml.email}</div>
+            </div>
+          </div>
+          <div class="result-right">
+            <span class="badge-members">${ml.membersCount} membres</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#999">
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+            </svg>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  document.querySelectorAll('.result-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const ml = mockMailingLists.find(m => m.id === card.dataset.id);
+      if (ml) showDetailPage(ml);
+    });
+  });
+}
+
+// ============================================
+// DETAIL PAGE
+// ============================================
+function initDetailPage() {
+  btnBack.addEventListener('click', () => {
+    detailPage.classList.remove('active');
+    searchPage.style.display = 'block';
+    currentMailingList = null;
+  });
+
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => showTab(tab.dataset.tab));
+  });
+
+  initMembersTab();
+  initOwnersTab();
+}
+
+function showDetailPage(ml) {
+  currentMailingList = ml;
+  selectedMemberIds = [];
+
+  document.getElementById('detailName').textContent = ml.name;
+  document.getElementById('detailEmail').textContent = ml.email;
+  document.getElementById('detailMembersCount').textContent = `${ml.membersCount} membres`;
+
+  document.getElementById('inputName').value = ml.name;
+  document.getElementById('inputEmail').value = ml.email;
+  document.getElementById('inputDescription').value = ml.description;
+
+  showTab('properties');
+  renderMembers();
+  renderOwners();
+
+  searchPage.style.display = 'none';
+  detailPage.classList.add('active');
+}
+
+function showTab(tabId) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tabId}"]`).classList.add('active');
+  document.getElementById(`tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`).classList.add('active');
+}
+
+// ============================================
+// MEMBERS TAB
+// ============================================
+function initMembersTab() {
+  const filterMembers = document.getElementById('filterMembers');
+  const selectAllMembers = document.getElementById('selectAllMembers');
+  const btnDeleteSelected = document.getElementById('btnDeleteSelected');
+  const btnAddMember = document.getElementById('btnAddMember');
+
+  filterMembers.addEventListener('input', () => renderMembers(filterMembers.value));
+
+  selectAllMembers.addEventListener('change', () => {
+    const checkboxes = document.querySelectorAll('.member-checkbox');
+    selectedMemberIds = selectAllMembers.checked ? Array.from(checkboxes).map(cb => cb.dataset.id) : [];
+    renderMembers(filterMembers.value);
+  });
+
+  btnDeleteSelected.addEventListener('click', () => {
+    showConfirmModal('Confirmer la suppression', `Êtes-vous sûr de vouloir retirer ${selectedMemberIds.length} membre(s) de cette mailing list ?`, () => {
+      selectedMemberIds = [];
+      renderMembers(filterMembers.value);
+      closeModal('modalConfirm');
+    });
+  });
+
+  btnAddMember.addEventListener('click', () => {
+    currentModalMode = 'member';
+    document.getElementById('modalAddTitle').textContent = 'Ajouter un membre';
+    document.getElementById('modalSearchInput').placeholder = 'Rechercher un utilisateur ou un groupe...';
+    openAddModal();
+  });
+}
+
+function renderMembers(filter = '') {
+  const tbody = document.getElementById('membersTableBody');
+  const filtered = mockMembers.filter(m =>
+    m.nom.toLowerCase().includes(filter.toLowerCase()) ||
+    m.prenom.toLowerCase().includes(filter.toLowerCase()) ||
+    m.email.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  document.getElementById('membersCountLabel').textContent = `${filtered.length} membres`;
+
+  tbody.innerHTML = filtered.map(member => `
+    <tr>
+      <td class="col-checkbox">
+        ${!member.inherited ? `<input type="checkbox" class="member-checkbox" data-id="${member.id}" ${selectedMemberIds.includes(member.id) ? 'checked' : ''}>` : ''}
+      </td>
+      <td>${member.nom}</td>
+      <td>${member.prenom}</td>
+      <td class="text-muted">${member.email}</td>
+      <td>
+        <span class="${member.type === 'Groupe' ? 'badge-group' : 'badge-user'}">${member.type}</span>
+        ${member.inherited ? `<span class="badge-inherited" title="Hérité de ${member.inheritedFrom}">Hérité</span>` : ''}
+      </td>
+      <td class="col-actions">
+        ${!member.inherited 
+          ? `<button class="btn-icon" onclick="deleteMember('${member.id}')" title="Supprimer">🗑️</button>`
+          : `<span class="text-disabled" title="Membre hérité">—</span>`
+        }
+      </td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('.member-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) selectedMemberIds.push(cb.dataset.id);
+      else selectedMemberIds = selectedMemberIds.filter(i => i !== cb.dataset.id);
+      updateSelectedCount();
+    });
+  });
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const count = selectedMemberIds.length;
+  document.getElementById('selectedCount').textContent = count;
+  document.getElementById('btnDeleteSelected').style.display = count > 0 ? 'inline-flex' : 'none';
+  const checkboxes = document.querySelectorAll('.member-checkbox');
+  document.getElementById('selectAllMembers').checked = checkboxes.length > 0 && selectedMemberIds.length === checkboxes.length;
+}
+
+window.deleteMember = function(id) {
+  const member = mockMembers.find(m => m.id === id);
+  showConfirmModal('Confirmer la suppression', `Êtes-vous sûr de vouloir retirer ${member.prenom} ${member.nom} de cette mailing list ?`, () => closeModal('modalConfirm'));
+};
+
+// ============================================
+// OWNERS TAB
+// ============================================
+function initOwnersTab() {
+  document.getElementById('btnAddOwner').addEventListener('click', () => {
+    currentModalMode = 'owner';
+    document.getElementById('modalAddTitle').textContent = 'Ajouter un propriétaire';
+    document.getElementById('modalSearchInput').placeholder = 'Rechercher un utilisateur...';
+    openAddModal();
+  });
+}
+
+function renderOwners() {
+  document.getElementById('ownersCountLabel').textContent = `${mockOwners.length} propriétaire(s)`;
+  document.getElementById('ownersList').innerHTML = mockOwners.map(owner => `
+    <div class="card-item">
+      <div class="card-left">
+        <div class="card-avatar">${owner.prenom.charAt(0)}${owner.nom.charAt(0)}</div>
+        <div class="card-info">
+          <div class="card-name">${owner.prenom} ${owner.nom}</div>
+          <div class="card-email">${owner.email}</div>
+        </div>
+      </div>
+      <button class="btn btn-danger" onclick="deleteOwner('${owner.id}')" ${mockOwners.length <= 1 ? 'disabled title="Impossible de supprimer le dernier propriétaire"' : ''}>Retirer</button>
+    </div>
+  `).join('');
+}
+
+window.deleteOwner = function(id) {
+  if (mockOwners.length <= 1) return;
+  const owner = mockOwners.find(o => o.id === id);
+  showConfirmModal('Confirmer le retrait', `Êtes-vous sûr de vouloir retirer ${owner.prenom} ${owner.nom} des propriétaires ?`, () => closeModal('modalConfirm'));
+};
+
+// ============================================
+// MODALS
+// ============================================
+function initModals() {
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeModal(btn.dataset.close));
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.remove('visible');
+    });
+  });
+
+  const modalSearchInput = document.getElementById('modalSearchInput');
+  modalSearchInput.addEventListener('input', function() {
+    const query = this.value.trim();
+    if (query.length < 2) {
+      document.getElementById('modalSearchResults').innerHTML = '';
+      return;
+    }
+    let results = mockSearchResults.filter(r =>
+      r.name.toLowerCase().includes(query.toLowerCase()) ||
+      r.email.toLowerCase().includes(query.toLowerCase())
+    );
+    if (currentModalMode === 'owner') results = results.filter(r => r.type === 'Utilisateur');
+    renderModalSearchResults(results);
+  });
+
+  document.getElementById('btnConfirmAdd').addEventListener('click', () => {
+    alert(`Ajout de ${modalSelectedIds.length} élément(s)`);
+    closeModal('modalAddMember');
+  });
+}
+
+function openAddModal() {
+  modalSelectedIds = [];
+  document.getElementById('modalSearchInput').value = '';
+  document.getElementById('modalSearchResults').innerHTML = '';
+  document.getElementById('btnConfirmAdd').disabled = true;
+  document.getElementById('modalAddMember').classList.add('visible');
+}
+
+function renderModalSearchResults(results) {
+  const container = document.getElementById('modalSearchResults');
+  if (results.length === 0) {
+    container.innerHTML = '<p class="results-label">Aucun résultat</p>';
+    return;
+  }
+  container.innerHTML = `
+    <p class="results-label">Résultats suggérés :</p>
+    ${results.map(r => `
+      <div class="result-item ${modalSelectedIds.includes(r.id) ? 'selected' : ''}" data-id="${r.id}">
+        <input type="checkbox" ${modalSelectedIds.includes(r.id) ? 'checked' : ''}>
+        <div class="result-avatar">${r.type === 'Groupe' ? '👥' : r.name.charAt(0)}</div>
+        <div class="result-item-info">
+          <div class="result-item-name">${r.name}</div>
+          <div class="result-item-email">${r.email}</div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+  document.querySelectorAll('#modalSearchResults .result-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = item.dataset.id;
+      if (modalSelectedIds.includes(id)) {
+        modalSelectedIds = modalSelectedIds.filter(i => i !== id);
+        item.classList.remove('selected');
+        item.querySelector('input').checked = false;
+      } else {
+        modalSelectedIds.push(id);
+        item.classList.add('selected');
+        item.querySelector('input').checked = true;
+      }
+      document.getElementById('btnConfirmAdd').disabled = modalSelectedIds.length === 0;
+    });
+  });
+}
+
+function showConfirmModal(title, message, onConfirm) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  document.getElementById('btnConfirmDelete').onclick = onConfirm;
+  document.getElementById('modalConfirm').classList.add('visible');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('visible');
+}
+  </script>
+</body>
+</html>

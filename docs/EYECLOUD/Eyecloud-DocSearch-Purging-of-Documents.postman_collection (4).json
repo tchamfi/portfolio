@@ -1,0 +1,656 @@
+{
+	"info": {
+		"_postman_id": "7b3921a3-3525-4cf1-bcce-5f8f618fec57",
+		"name": "Eyecloud-DocSearch-Purging-of-Documents",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "24581659"
+	},
+	"item": [
+		{
+			"name": "Document Search with Purging",
+			"item": [
+				{
+					"name": "Create-Identifier",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var json = JSON.parse(responseBody);\r",
+									"var moment = require('moment');\r",
+									" pm.globals.set(\"ecid1\", json[\"0\"]);\r",
+									" pm.globals.set(\"ecid2\", json[\"1\"]);\r",
+									" pm.globals.set(\"ecid3\", json[\"2\"]);\r",
+									" pm.globals.set(\"current_date\", moment().format(\"yyyy/MM/DD\"));\r",
+									" pm.globals.set(\"from_date\", moment().format(\"yyyy/MM/DD\")+\" 00:00:00\");\r",
+									" pm.globals.set(\"to_date\", moment().format(\"yyyy/MM/DD\")+\" 23:59:59\");\r",
+									" console.log(\"ecid1 -> \"+pm.globals.get(\"ecid1\")); \r",
+									" console.log(\"ecid2 -> \"+pm.globals.get(\"ecid2\")); \r",
+									" console.log(\"ecid3 -> \"+pm.globals.get(\"ecid3\")); \r",
+									" console.log(\"from_date -> \"+pm.globals.get(\"from_date\")); \r",
+									" console.log(\"to_date -> \"+pm.globals.get(\"to_date\")); \r",
+									"\r",
+									"if (responseCode.code === 201)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 201\"] = responseCode.code === 201;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-29aa6773-c2dc-4a8c-b67e-8392f77b142b",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-a07a9d82-c879-47ba-91cd-39cea92e8c66",
+								"type": "text"
+							},
+							{
+								"key": "count",
+								"value": "3",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/ecid",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Post-Document-with-ecid1",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 201)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 201\"] = responseCode.code === 201;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"pm.test(\"Request is Created\", function () {\r",
+									"    pm.response.to.have.status(\"Created\");\r",
+									"});\r",
+									"\r",
+									"tests[\"Response message contains File Created Successfully\"] = responseBody.has(\"File Created Successfully\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-29aa6773-c2dc-4a8c-b67e-8392f77b142b",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-a07a9d82-c879-47ba-91cd-39cea92e8c66",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "",
+									"type": "file",
+									"src": "postman-cloud:///1eedf981-d120-4f90-8ef0-0110f6db78a7"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://in-ec-tin.rxdigitalplatform.com/v3/ecid/:id/documents/:filetype",
+							"protocol": "https",
+							"host": [
+								"in-ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid",
+								":id",
+								"documents",
+								":filetype"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{ecid1}}"
+								},
+								{
+									"key": "filetype",
+									"value": "c-7405d000-1ff4-45fd-a3d2-31dabcc423e4"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search-Document-with-id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 200)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 200\"] = responseCode.code === 200;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"tests[\"Response message contains id_type\"] = responseBody.has(\"ecid\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"id\": \"{{ecid1}}\",\r\n  \"id_type\": \"\",\r\n  \"actor_key\": \"\",\r\n  \"app_key\": \"\",\r\n  \"from_date\": \"{{from_date}}\",\r\n  \"to_date\": \"{{to_date}}\",\r\n  \"filetype\": \"\",\r\n  \"size\": 1000,\r\n  \"pagination_token\": \"\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/documents",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"documents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Purge-document-by-id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 202)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 202\"] = responseCode.code === 202;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"tests[\"Response message contains id\"] = responseBody.has(\"1\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-8d8e7861-4f99-493e-a081-e8b4cf7f4f15",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-2abf6ebf-9f98-4208-b548-cc61f8fe3810",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/ecid/:id/purge",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid",
+								":id",
+								"purge"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{ecid1}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Post-Document-with-ecid2",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 201)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 201\"] = responseCode.code === 201;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"pm.test(\"Request is Created\", function () {\r",
+									"    pm.response.to.have.status(\"Created\");\r",
+									"});\r",
+									"\r",
+									"tests[\"Response message contains File Created Successfully\"] = responseBody.has(\"File Created Successfully\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-29aa6773-c2dc-4a8c-b67e-8392f77b142b",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-a07a9d82-c879-47ba-91cd-39cea92e8c66",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "",
+									"type": "file",
+									"src": "postman-cloud:///1eedf981-d120-4f90-8ef0-0110f6db78a7"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://in-ec-tin.rxdigitalplatform.com/v3/ecid/:id/documents/:filetype",
+							"protocol": "https",
+							"host": [
+								"in-ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid",
+								":id",
+								"documents",
+								":filetype"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{ecid2}}"
+								},
+								{
+									"key": "filetype",
+									"value": "c-7405d000-1ff4-45fd-a3d2-31dabcc423e4"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search-Document-with-all-parameters",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 200)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 200\"] = responseCode.code === 200;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"tests[\"Response message contains id_type\"] = responseBody.has(\"ecid\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"id\": \"{{ecid2}}\",\r\n  \"id_type\": \"\",\r\n  \"actor_key\": \"t-a07a9d82-c879-47ba-91cd-39cea92e8c66\",\r\n  \"app_key\": \"v-29aa6773-c2dc-4a8c-b67e-8392f77b142b\",\r\n  \"from_date\": \"{{from_date}}\",\r\n  \"to_date\": \"{{to_date}}\",\r\n  \"filetype\": \"c-7405d000-1ff4-45fd-a3d2-31dabcc423e4\",\r\n  \"size\": 1000,\r\n  \"pagination_token\": \"\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/documents",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"documents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Purge-document-with-filetype",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Check response code is 204\", function () {\r",
+									"    pm.response.to.have.status(204);\r",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-29aa6773-c2dc-4a8c-b67e-8392f77b142b",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-2abf6ebf-9f98-4208-b548-cc61f8fe3810",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/ecid/documents?file_upload_from_Date={{current_date}}&file_upload_to_Date={{current_date}}&file_type_key=c-7405d000-1ff4-45fd-a3d2-31dabcc423e4",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid",
+								"documents"
+							],
+							"query": [
+								{
+									"key": "file_upload_from_Date",
+									"value": "{{current_date}}"
+								},
+								{
+									"key": "file_upload_to_Date",
+									"value": "{{current_date}}"
+								},
+								{
+									"key": "file_type_key",
+									"value": "c-7405d000-1ff4-45fd-a3d2-31dabcc423e4"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Post-Document-with-ecid3",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 201)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 201\"] = responseCode.code === 201;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"pm.test(\"Request is Created\", function () {\r",
+									"    pm.response.to.have.status(\"Created\");\r",
+									"});\r",
+									"\r",
+									"tests[\"Response message contains File Created Successfully\"] = responseBody.has(\"File Created Successfully\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-29aa6773-c2dc-4a8c-b67e-8392f77b142b",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-a07a9d82-c879-47ba-91cd-39cea92e8c66",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "",
+									"type": "file",
+									"src": "postman-cloud:///1eedf981-d120-4f90-8ef0-0110f6db78a7"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://in-ec-tin.rxdigitalplatform.com/v3/ecid/:id/documents/:filetype",
+							"protocol": "https",
+							"host": [
+								"in-ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid",
+								":id",
+								"documents",
+								":filetype"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{ecid3}}"
+								},
+								{
+									"key": "filetype",
+									"value": "c-7405d000-1ff4-45fd-a3d2-31dabcc423e4"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search-Document-with-application",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									" if (responseCode.code === 200)\r",
+									"{\r",
+									"var jsonData = JSON.parse(responseBody);\r",
+									"tests[\"Status Code is 200\"] = responseCode.code === 200;\r",
+									"\r",
+									"tests[\"Response time is acceptable if<5s\"] = responseTime < 5000;\r",
+									"\r",
+									"tests[\"Response message contains id_type\"] = responseBody.has(\"ecid\");\r",
+									"\r",
+									"};"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"id\": \"\",\r\n  \"id_type\": \"\",\r\n  \"actor_key\": \"\",\r\n  \"app_key\": \"v-29aa6773-c2dc-4a8c-b67e-8392f77b142b\",\r\n  \"from_date\": \"{{from_date}}\",\r\n  \"to_date\": \"{{to_date}}\",\r\n  \"filetype\": \"\",\r\n  \"size\": 1000,\r\n  \"pagination_token\": \"\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/documents",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"documents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Purge-document-with-uploaded-date",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Check response code is 204\", function () {\r",
+									"    pm.response.to.have.status(204);\r",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "application_key",
+								"value": "v-29aa6773-c2dc-4a8c-b67e-8392f77b142b",
+								"type": "text"
+							},
+							{
+								"key": "actor_key",
+								"value": "t-a07a9d82-c879-47ba-91cd-39cea92e8c66",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://ec-tin.rxdigitalplatform.com/v3/ecid/documents?file_upload_from_date={{from_date}}&file_upload_to_date={{to_date}}",
+							"protocol": "https",
+							"host": [
+								"ec-tin",
+								"rxdigitalplatform",
+								"com"
+							],
+							"path": [
+								"v3",
+								"ecid",
+								"documents"
+							],
+							"query": [
+								{
+									"key": "file_upload_from_date",
+									"value": "{{from_date}}"
+								},
+								{
+									"key": "file_upload_to_date",
+									"value": "{{to_date}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

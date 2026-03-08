@@ -1,19 +1,21 @@
 """
 rag_pipeline.py — RAG pipeline for Ask Lionel
-Compatible with chromadb 0.5.x
+Uses TF-IDF (scikit-learn) instead of ChromaDB — lightweight, no C++ deps
 """
 
 import os
-import chromadb
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from anthropic import Anthropic
 from cv_data import CV_CHUNKS
 from doc_loader import load_documents_as_chunks
 
-COLLECTION_NAME = "lionel_cv"
 TOP_K = 12
 
-_client = None
-_collection = None
+_vectorizer = None
+_tfidf_matrix = None
+_all_chunks = None
 
 
 def _get_api_key():
@@ -25,51 +27,96 @@ def _get_api_key():
 
 
 def create_chroma_collection():
-    global _client, _collection
+    """Create TF-IDF index from CV chunks + documents. Name kept for compatibility."""
+    global _vectorizer, _tfidf_matrix, _all_chunks
 
-    # Reuse existing if already created (handles Streamlit reruns)
-    if _collection is not None:
-        return _collection
+    if _all_chunks is not None:
+        return
 
-    _client = chromadb.EphemeralClient()
+    _all_chunks = []
 
-    # Collect all chunks
-    all_ids, all_docs, all_meta = [], [], []
-
+    # 1. Manual chunks from cv_data.py
     for c in CV_CHUNKS:
-        all_ids.append(c["id"])
-        all_docs.append(c["text"])
-        all_meta.append(c["metadata"])
+        _all_chunks.append({
+            "id": c["id"],
+            "text": c["text"],
+            "metadata": c["metadata"]
+        })
     print(f"[RAG] {len(CV_CHUNKS)} manual chunks")
 
+    # 2. Auto-loaded documents from ./docs/
     doc_chunks = load_documents_as_chunks()
     for c in doc_chunks:
-        all_ids.append(c["id"])
-        all_docs.append(c["text"])
-        all_meta.append(c["metadata"])
+        _all_chunks.append({
+            "id": c["id"],
+            "text": c["text"],
+            "metadata": c["metadata"]
+        })
     print(f"[RAG] {len(doc_chunks)} document chunks")
 
-    _collection = _client.get_or_create_collection(name=COLLECTION_NAME)
-    _collection.upsert(ids=all_ids, documents=all_docs, metadatas=all_meta)
-    print(f"[RAG] Total: {len(all_ids)} chunks indexed")
-    return _collection
+    # 3. Build TF-IDF index
+    texts = [c["text"] for c in _all_chunks]
+    _vectorizer = TfidfVectorizer(
+        max_features=10000,
+        ngram_range=(1, 2),
+        stop_words=None,  # keep French words
+        sublinear_tf=True
+    )
+    _tfidf_matrix = _vectorizer.fit_transform(texts)
+    print(f"[RAG] Total: {len(_all_chunks)} chunks indexed (TF-IDF)")
 
 
 def get_collection():
-    global _collection
-    if _collection is None:
+    """Compatibility wrapper — ensures index is built."""
+    if _all_chunks is None:
         create_chroma_collection()
-    return _collection
+    return True  # dummy return for compatibility
 
 
 def retrieve_context(question, top_k=TOP_K):
-    collection = get_collection()
-    results = collection.query(query_texts=[question], n_results=top_k)
+    get_collection()
+    return _search(question, top_k)
+
+
+def _search(question, top_k):
+    """Internal search function returning formatted context."""
+    query_vec = _vectorizer.transform([question])
+    similarities = cosine_similarity(query_vec, _tfidf_matrix).flatten()
+    top_indices = np.argsort(similarities)[::-1][:top_k]
+
     parts = []
-    for i, doc in enumerate(results["documents"][0]):
-        source = results["metadatas"][0][i].get("source", "cv_data.py")
-        parts.append(f"[Source {i+1} - {source}]\n{doc}")
+    for rank, idx in enumerate(top_indices):
+        if similarities[idx] < 0.01:
+            continue
+        chunk = _all_chunks[idx]
+        source = chunk["metadata"].get("source", "cv_data.py")
+        parts.append(f"[Source {rank+1} - {source}]\n{chunk['text']}")
     return "\n\n---\n\n".join(parts)
+
+
+def search_chunks(queries, top_k=10):
+    """Search multiple queries and return deduplicated results (for agent)."""
+    get_collection()
+    seen = set()
+    all_results = []
+    for q in queries:
+        query_vec = _vectorizer.transform([q])
+        similarities = cosine_similarity(query_vec, _tfidf_matrix).flatten()
+        top_indices = np.argsort(similarities)[::-1][:top_k]
+        for idx in top_indices:
+            if similarities[idx] < 0.01:
+                continue
+            cid = _all_chunks[idx]["id"]
+            if cid not in seen:
+                seen.add(cid)
+                all_results.append({
+                    "id": cid,
+                    "text": _all_chunks[idx]["text"],
+                    "score": float(similarities[idx]),
+                    "source": _all_chunks[idx]["metadata"].get("source", "cv_data.py")
+                })
+    all_results.sort(key=lambda x: x["score"], reverse=True)
+    return "\n\n---\n\n".join(f"[{r['source']}]\n{r['text']}" for r in all_results[:15])
 
 
 def generate_response(question, context):

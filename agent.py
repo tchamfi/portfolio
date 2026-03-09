@@ -21,7 +21,7 @@ def _get_api_key():
 def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
     response = client.messages.create(
-        model="claude-sonnet-4-20250514", max_tokens=1024,
+        model="claude-sonnet-4-20250514", max_tokens=1024, temperature=0,
         system="""Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations cles au format JSON strict (pas de markdown, pas de backticks).
 {
@@ -51,7 +51,7 @@ def query_rag_profile(queries):
 def compute_matching(job_analysis, profile_context):
     client = Anthropic(api_key=_get_api_key())
     response = client.messages.create(
-        model="claude-sonnet-4-20250514", max_tokens=1500,
+        model="claude-sonnet-4-20250514", max_tokens=1500, temperature=0,
         system="""Tu es un expert en recrutement IT et en matching de profils senior.
 Tu evalues la compatibilite entre un candidat et une offre avec une approche COMMERCIALE et REALISTE.
 

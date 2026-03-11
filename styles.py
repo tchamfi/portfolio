@@ -117,12 +117,14 @@ CSS = """
     .m-card .m-desc{font-size:.78rem;color:#94a3b8!important;margin-top:.2rem;}
 
     /* TABS */
-    .stTabs [data-baseweb="tab-list"]{background:white;border-radius:20px;padding:12px 14px;gap:8px;border:none;box-shadow:0 6px 30px rgba(99,102,241,.1);justify-content:center;}
-    .stTabs [data-baseweb="tab"]{font-weight:900;font-size:1.1rem;color:#334155!important;border-radius:14px;padding:16px 32px;background:transparent;border:none;transition:all .25s ease;text-transform:uppercase;letter-spacing:.03em;}
+    .stTabs [data-baseweb="tab-list"]{background:white;border-radius:20px;padding:12px 14px;gap:8px;border:none!important;box-shadow:0 6px 30px rgba(99,102,241,.1);justify-content:center;outline:none!important;}
+    .stTabs [data-baseweb="tab"]{font-weight:900!important;font-size:1.1rem;color:#334155!important;border-radius:14px;padding:16px 32px;background:transparent;border:none!important;transition:all .25s ease;text-transform:uppercase;letter-spacing:.03em;}
+    .stTabs [data-baseweb="tab"] p,.stTabs [data-baseweb="tab"] span,.stTabs [data-baseweb="tab"] div{font-weight:900!important;color:#334155!important;}
     .stTabs [data-baseweb="tab"]:hover{color:#4f46e5!important;background:rgba(99,102,241,.06);}
+    .stTabs [data-baseweb="tab"]:hover p,.stTabs [data-baseweb="tab"]:hover span{color:#4f46e5!important;}
     .stTabs [aria-selected="true"]{background:linear-gradient(135deg,#6366f1,#8b5cf6)!important;color:#ffffff!important;border:none!important;box-shadow:0 4px 20px rgba(99,102,241,.4);-webkit-text-fill-color:#ffffff!important;}
-    .stTabs [aria-selected="true"] p,.stTabs [aria-selected="true"] span,.stTabs [aria-selected="true"] div{color:#ffffff!important;-webkit-text-fill-color:#ffffff!important;}
-    .stTabs [data-baseweb="tab-highlight"],.stTabs [data-baseweb="tab-border"]{display:none;}
+    .stTabs [aria-selected="true"] p,.stTabs [aria-selected="true"] span,.stTabs [aria-selected="true"] div{color:#ffffff!important;-webkit-text-fill-color:#ffffff!important;font-weight:900!important;}
+    .stTabs [data-baseweb="tab-highlight"],.stTabs [data-baseweb="tab-border"]{display:none!important;}
     .stTabs [data-baseweb="tab-panel"]{padding-top:2rem;}
 
     /* CHAT */

@@ -382,10 +382,16 @@ if active_tab is not None:
 st.markdown("---")
 st.markdown(f'<div class="site-footer"><p><a href="{cfg.get("linkedin","")}" target="_blank">LinkedIn</a> &middot; <a href="mailto:{cfg.get("email","")}">{cfg.get("email","")}</a> &middot; {cfg.get("phone","")}</p><p style="margin-top:.5rem">Lionel TCHAMFONG &copy; 2026</p></div>',unsafe_allow_html=True)
 
-# ADMIN — hidden behind discrete copyright click
-st.markdown('<div style="text-align:center;margin-top:1rem">', unsafe_allow_html=True)
-with st.expander("", expanded=False):
-    ac=st.text_input("x",type="password",label_visibility="collapsed",placeholder="Code")
-    if ac==PRIVATE_CODE:
-        st.session_state.is_private=True; st.session_state.admin_view=True; st.session_state.recos=load_recos(); st.session_state.pop("admin_exp",None); st.session_state.pop("admin_cs",None); st.session_state.pop("admin_v",None); st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
+# ADMIN — hidden: only shows if ?admin=1 in URL or via session
+query_params = st.query_params
+if query_params.get("admin") == "1" or st.session_state.get("show_admin_login"):
+    st.session_state.show_admin_login = True
+    with st.form("admin_form", clear_on_submit=True):
+        ac = st.text_input("x", type="password", label_visibility="collapsed", placeholder="Code admin")
+        if st.form_submit_button("OK", use_container_width=True):
+            if ac == PRIVATE_CODE:
+                st.session_state.is_private = True; st.session_state.admin_view = True; st.session_state.recos = load_recos()
+                st.session_state.pop("admin_exp", None); st.session_state.pop("admin_cs", None); st.session_state.pop("admin_v", None)
+                st.session_state.show_admin_login = False; st.rerun()
+            else:
+                st.session_state.is_private = False

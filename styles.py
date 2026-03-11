@@ -118,8 +118,8 @@ CSS = """
 
     /* TABS */
     .stTabs [data-baseweb="tab-list"]{background:white;border-radius:20px;padding:10px;gap:10px;border:3px solid rgba(99,102,241,.2);box-shadow:0 6px 30px rgba(99,102,241,.1);justify-content:center;}
-    .stTabs [data-baseweb="tab"]{font-weight:800;font-size:1.1rem;color:#94a3b8!important;border-radius:14px;padding:18px 40px;background:transparent;border:none;transition:all .2s;}
-    .stTabs [data-baseweb="tab"]:hover{color:#6366f1!important;background:rgba(99,102,241,.04);}
+    .stTabs [data-baseweb="tab"]{font-weight:800;font-size:1.1rem;color:#64748b!important;border-radius:14px;padding:18px 40px;background:transparent;border:none;transition:all .25s ease;}
+    .stTabs [data-baseweb="tab"]:hover{color:#4f46e5!important;background:rgba(99,102,241,.1);}
     .stTabs [aria-selected="true"]{background:linear-gradient(135deg,#6366f1,#8b5cf6)!important;color:white!important;border:none!important;box-shadow:0 8px 25px rgba(99,102,241,.35);}
     .stTabs [data-baseweb="tab-highlight"],.stTabs [data-baseweb="tab-border"]{display:none;}
     .stTabs [data-baseweb="tab-panel"]{padding-top:2rem;}
@@ -184,6 +184,9 @@ CSS = """
     .admin-zone input:focus{border-color:#6366f1!important;box-shadow:0 0 0 3px rgba(99,102,241,.12)!important;outline:none!important;}
     .admin-zone button{font-size:.7rem!important;padding:4px 10px!important;background:#e2e8f0!important;color:#64748b!important;box-shadow:none!important;border:1px solid rgba(0,0,0,.08)!important;}
     .admin-zone button span, .admin-zone button p{color:#64748b!important;}
+    .site-footer + div .streamlit-expanderHeader{font-size:0!important;padding:2px!important;min-height:0!important;background:transparent!important;border:none!important;opacity:.15!important;}
+    .site-footer + div .streamlit-expanderHeader:hover{opacity:.4!important;}
+    .site-footer + div .streamlit-expanderHeader svg{width:12px!important;height:12px!important;color:#94a3b8!important;}
     .admin-header{background:linear-gradient(135deg,#dc2626,#ef4444);border-radius:16px;padding:1rem 2rem;margin-bottom:2rem;}
     .admin-header-title{color:white!important;font-size:1.3rem;font-weight:800;}
     .admin-header-sub{color:rgba(255,255,255,.7)!important;font-size:.8rem;}

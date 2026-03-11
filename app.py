@@ -224,7 +224,7 @@ st.markdown(f'<div class="hero-section"><div class="hero-name">{hero_name}</div>
 
 # CONTACT
 phone_html=f'<a href="tel:{cfg.get("phone","")}">{cfg.get("phone","")}</a>' if cfg.get("show_phone") else ""
-cal_btn=f'<a href="#cal" class="rdv">{"Book a call" if lang=="en" else "Prendre rendez-vous"}</a>' if cfg.get("calendly") else ""
+cal_btn=f'<a href="{cfg.get("calendly","")}" target="_blank" class="rdv">{"Book a call" if lang=="en" else "Prendre rendez-vous"}</a>' if cfg.get("calendly") else ""
 st.markdown(f'<div class="contact-bar"><a href="{cfg.get("linkedin","")}" target="_blank">LinkedIn</a><a href="mailto:{cfg.get("email","")}">{cfg.get("email","")}</a>{phone_html}{cal_btn}</div>',unsafe_allow_html=True)
 
 # METRICS
@@ -238,9 +238,9 @@ if cfg.get("show_metrics",True):
 # MAIN NAVIGATION TABS
 # ============================================================
 if lang=="en":
-    main_tabs=["👤 About me","💬 Ask a question","📊 Matching","📅 Book a call","⭐ Recommendations"]
+    main_tabs=["About me","Ask a question","Matching","Book a call","Recommendations"]
 else:
-    main_tabs=["👤 Profil","💬 Poser une question","📊 Matching","📅 Rendez-vous","⭐ Recommandations"]
+    main_tabs=["Profil","Poser une question","Matching","Rendez-vous","Recommandations"]
 
 # Auto-click tab after rerun
 active_tab=st.session_state.pop("active_tab",None)
@@ -382,13 +382,10 @@ if active_tab is not None:
 st.markdown("---")
 st.markdown(f'<div class="site-footer"><p><a href="{cfg.get("linkedin","")}" target="_blank">LinkedIn</a> &middot; <a href="mailto:{cfg.get("email","")}">{cfg.get("email","")}</a> &middot; {cfg.get("phone","")}</p><p style="margin-top:.5rem">Lionel TCHAMFONG &copy; 2026</p></div>',unsafe_allow_html=True)
 
-# ADMIN
-s1,adm,s2=st.columns([4,2,4])
-with adm:
-    st.markdown('<div class="admin-zone">',unsafe_allow_html=True)
-    with st.form("admin_form",clear_on_submit=True):
-        ac=st.text_input("x",type="password",label_visibility="collapsed",placeholder="Admin")
-        if st.form_submit_button("OK",use_container_width=True):
-            if ac==PRIVATE_CODE: st.session_state.is_private=True; st.session_state.admin_view=True; st.session_state.recos=load_recos(); st.session_state.pop("admin_exp",None); st.session_state.pop("admin_cs",None); st.session_state.pop("admin_v",None); st.rerun()
-            else: st.session_state.is_private=False
-    st.markdown('</div>',unsafe_allow_html=True)
+# ADMIN — hidden behind discrete copyright click
+st.markdown('<div style="text-align:center;margin-top:1rem">', unsafe_allow_html=True)
+with st.expander("", expanded=False):
+    ac=st.text_input("x",type="password",label_visibility="collapsed",placeholder="Code")
+    if ac==PRIVATE_CODE:
+        st.session_state.is_private=True; st.session_state.admin_view=True; st.session_state.recos=load_recos(); st.session_state.pop("admin_exp",None); st.session_state.pop("admin_cs",None); st.session_state.pop("admin_v",None); st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)

@@ -26,6 +26,7 @@ FALLBACK_CONFIG = {
     "metric4_label": "Platforms", "metric4_value": "Cloud, APIs & Data", "metric4_desc": "AWS, Azure, Databricks",
     "exp": [], "case_studies": [],
     "show_profil": True, "show_metrics": True, "show_case_studies": True, "show_parcours": True, "show_recos": True,
+    "show_chat": True, "show_matching": True, "show_rdv": True,
     "hero_name": "Lionel TCHAMFONG",
     "hero_title": "Senior Product Owner — Data Platforms, APIs & AI",
     "hero_tagline_fr": "Je concois et pilote des plateformes data, APIs et produits IA dans des environnements internationaux complexes.",

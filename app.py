@@ -78,15 +78,24 @@ if st.session_state.admin_view:
         with vc2: new_show_phone=st.checkbox("Afficher tel",value=cfg.get("show_phone",True),key="a_sph")
 
     with at2:
-        st.caption("Activez ou desactivez les sections visibles sur le site public.")
+        st.caption("Activez ou désactivez les sections et onglets visibles sur le site public.")
+        st.markdown("**Sections**")
         v1,v2=st.columns(2)
         with v1:
-            new_show_metrics=st.checkbox("Metriques",value=cfg.get("show_metrics",True),key="v_met")
-            new_show_profil=st.checkbox("Profil / A propos",value=cfg.get("show_profil",True),key="v_pro")
-            new_show_cs=st.checkbox("Etudes de cas",value=cfg.get("show_case_studies",True),key="v_cs")
+            new_show_metrics=st.checkbox("Métriques",value=cfg.get("show_metrics",True),key="v_met")
+            new_show_profil=st.checkbox("Profil / À propos",value=cfg.get("show_profil",True),key="v_pro")
+            new_show_cs=st.checkbox("Projets clés",value=cfg.get("show_case_studies",True),key="v_cs")
         with v2:
             new_show_parcours=st.checkbox("Parcours professionnel",value=cfg.get("show_parcours",True),key="v_par")
-            new_show_recos=st.checkbox("Recommandations",value=cfg.get("show_recos",True),key="v_rec")
+        st.markdown("---")
+        st.markdown("**Onglets de navigation**")
+        v3,v4=st.columns(2)
+        with v3:
+            new_show_chat=st.checkbox("💬 Poser une question (Chat IA)",value=cfg.get("show_chat",True),key="v_chat")
+            new_show_matching=st.checkbox("📊 Matching profil/offre",value=cfg.get("show_matching",True),key="v_match")
+        with v4:
+            new_show_rdv=st.checkbox("📅 Rendez-vous (Calendly)",value=cfg.get("show_rdv",True),key="v_rdv")
+            new_show_recos=st.checkbox("⭐ Recommandations",value=cfg.get("show_recos",True),key="v_rec")
 
     with at3:
         pc1,pc2=st.columns(2)
@@ -219,7 +228,7 @@ if st.session_state.admin_view:
             st.info("Aucune interaction enregistrée. Les prochaines questions et matchings apparaîtront ici.")
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
-        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"_record_ids":cfg.get("_record_ids",{})}
+        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"_record_ids":cfg.get("_record_ids",{})}
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
         st.session_state.admin_exp=new_exp; st.session_state.admin_cs=new_cs
         st.session_state.messages=[{"role":"assistant","content":WELCOME_FR}]
@@ -267,20 +276,30 @@ if cfg.get("show_metrics",True):
     st.markdown("<br>",unsafe_allow_html=True)
 
 # ============================================================
-# MAIN NAVIGATION TABS
+# MAIN NAVIGATION TABS — dynamic based on visibility settings
 # ============================================================
-if lang=="en":
-    main_tabs=["About me","Ask a question","Matching","Book a call","Recommendations"]
-else:
-    main_tabs=["Profil","Poser une question","Matching","Rendez-vous","Recommandations"]
+tab_defs = []
+tab_defs.append(("Profil" if lang=="fr" else "About me", "profil"))
+if cfg.get("show_chat", True):
+    tab_defs.append(("Poser une question" if lang=="fr" else "Ask a question", "chat"))
+if cfg.get("show_matching", True):
+    tab_defs.append(("Matching" if lang=="fr" else "Matching", "matching"))
+if cfg.get("show_rdv", True):
+    tab_defs.append(("Rendez-vous" if lang=="fr" else "Book a call", "rdv"))
+if cfg.get("show_recos", True):
+    tab_defs.append(("Recommandations" if lang=="fr" else "Recommendations", "recos"))
+
+main_tabs = [t[0] for t in tab_defs]
+tab_keys = [t[1] for t in tab_defs]
 
 # Auto-click tab after rerun
 active_tab=st.session_state.pop("active_tab",None)
 
-tab_profil, tab_chat, tab_agent, tab_rdv, tab_recos = st.tabs(main_tabs)
+created_tabs = st.tabs(main_tabs)
+tab_dict = {tab_keys[i]: created_tabs[i] for i in range(len(tab_keys))}
 
 # --- TAB 1 : PROFIL ---
-with tab_profil:
+with tab_dict["profil"]:
     # Profil paragraphs
     if cfg.get("show_profil",True):
         pk="_en" if lang=="en" else ""
@@ -309,7 +328,8 @@ with tab_profil:
             st.markdown(f'<div class="collapse-section"><details><summary><div class="sec-chevron">{chevron_svg}</div><span class="sec-title">{"Career Path" if lang=="en" else "Parcours professionnel"}</span></summary><div style="padding-top:1.2rem">{tl_html}</div></details></div>',unsafe_allow_html=True)
 
 # --- TAB 2 : CHAT RAG ---
-with tab_chat:
+if "chat" in tab_dict:
+ with tab_dict["chat"]:
     st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
     chat_html='<div class="chat-box" id="chat-box">'
     for msg in st.session_state.messages:
@@ -326,10 +346,11 @@ with tab_chat:
         except Exception as e: resp=f"Error: {e}"
         try: log_chat(typed, resp, lang=lang, chunks_used=12)
         except: pass
-        st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=1; st.rerun()
+        st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
 
 # --- TAB 3 : MATCHING ---
-with tab_agent:
+if "matching" in tab_dict:
+ with tab_dict["matching"]:
     if is_private: st.markdown('<span style="font-family:JetBrains Mono;font-size:.7rem;padding:4px 12px;border-radius:100px;border:1px solid rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.06)">PRIVATE</span>',unsafe_allow_html=True)
     matching_title = "Profile Matching — How compatible am I with your position?" if lang=="en" else "Matching de profil — Suis-je le bon candidat pour votre poste ?"
     matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes compétences et mon expérience, et générer un score de compatibilité avec les arguments clés."
@@ -367,28 +388,28 @@ with tab_agent:
         elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---
-with tab_rdv:
+if "rdv" in tab_dict:
+ with tab_dict["rdv"]:
     cal=cfg.get("calendly","")
     if cal:
         st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Réservez un appel découverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un créneau qui vous convient. 30 minutes pour échanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
         components.html(f'<iframe src="{cal}" width="100%" height="680" frameborder="0" style="border-radius:16px;"></iframe>',height=700)
 
 # --- TAB 5 : RECOMMANDATIONS ---
-with tab_recos:
-    if cfg.get("show_recos",True):
-        approved=[r for r in recos if r.get("approved")]
-        reco_html=""
-        for r in approved:
-            li=r.get("linkedin","")
-            name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{r["name"]}</a>' if li else f'<span class="reco-name">{r["name"]}</span>'
-            verified='<span class="reco-verified">&#10003; Profil vérifié</span>' if li else ''
-            collab=f'<span class="reco-collab">{r.get("collab_period","")}</span>' if r.get("collab_period") else ""
-            reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div>'
-        if reco_html:
-            st.markdown(reco_html,unsafe_allow_html=True)
-        else:
-            st.markdown(f'<p style="color:#94a3b8;padding:2rem 0">{"No recommendations yet. Be the first!" if lang=="en" else "Aucune recommandation pour le moment. Soyez le premier !"}</p>',unsafe_allow_html=True)
-
+if "recos" in tab_dict:
+ with tab_dict["recos"]:
+    approved=[r for r in recos if r.get("approved")]
+    reco_html=""
+    for r in approved:
+        li=r.get("linkedin","")
+        name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{r["name"]}</a>' if li else f'<span class="reco-name">{r["name"]}</span>'
+        verified='<span class="reco-verified">&#10003; Profil vérifié</span>' if li else ''
+        collab=f'<span class="reco-collab">{r.get("collab_period","")}</span>' if r.get("collab_period") else ""
+        reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div>'
+    if reco_html:
+        st.markdown(reco_html,unsafe_allow_html=True)
+    else:
+        st.markdown(f'<p style="color:#94a3b8;padding:2rem 0">{"No recommendations yet. Be the first!" if lang=="en" else "Aucune recommandation pour le moment. Soyez le premier !"}</p>',unsafe_allow_html=True)
     st.markdown("---")
     with st.form("reco_form",clear_on_submit=True):
         st.markdown(f"**{'Leave a recommendation' if lang=='en' else 'Laisser une recommandation'}**")
@@ -401,7 +422,7 @@ with tab_recos:
             if rf_n and rf_tx:
                 add_reco({"name":rf_n,"title":rf_t,"company":rf_c,"relation":rf_r,"text":rf_tx,"linkedin":rf_li,"collab_period":rf_cp,"date":datetime.now().strftime("%Y-%m")})
                 st.session_state.reco_submitted=True
-                st.session_state.active_tab=4; st.rerun()
+                st.session_state.active_tab=tab_keys.index("recos") if "recos" in tab_keys else 0; st.rerun()
             else:
                 st.warning("Please fill in your name and recommendation." if lang=="en" else "Veuillez renseigner votre nom et votre recommandation.")
     if st.session_state.get("reco_submitted"):

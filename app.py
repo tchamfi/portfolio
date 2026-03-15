@@ -252,19 +252,10 @@ if st.session_state.admin_view:
                     sc = m.get("score", 0) or 0
                     sc_col = "#16a34a" if sc >= 80 else ("#d97706" if sc >= 60 else "#dc2626")
                     sc_bg = "rgba(34,197,94,.08)" if sc >= 80 else ("rgba(217,119,6,.08)" if sc >= 60 else "rgba(220,38,38,.08)")
-                    em_html = f'<div style="margin-top:4px;font-size:.75rem;color:#6366f1">📧 {m.get("email")}</div>' if m.get("email") else ""
+                    em_html = f'<span style="display:block;margin-top:4px;font-size:.75rem;color:#6366f1">📧 {m.get("email")}</span>' if m.get("email") else ""
                     date_str = m.get("date", "")
-                    st.markdown(f"""<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:{sc_bg};border-left:4px solid {sc_col};display:flex;align-items:center;gap:14px">
-                        <div style="min-width:52px;text-align:center;background:white;border-radius:10px;padding:6px 0;box-shadow:0 2px 8px rgba(0,0,0,.06)">
-                            <div style="font-size:1.2rem;font-weight:900;color:{sc_col}">{sc}</div>
-                            <div style="font-size:.6rem;color:#94a3b8">/100</div>
-                        </div>
-                        <div style="flex:1">
-                            <div style="font-weight:700;color:#1e293b;font-size:.9rem">{m.get("poste","Sans titre")}</div>
-                            <div style="font-size:.75rem;color:#94a3b8;margin-top:2px">{date_str}</div>
-                            {em_html}
-                        </div>
-                    </div>""", unsafe_allow_html=True)
+                    poste = m.get("poste", "Sans titre")
+                    st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:{sc_bg};border-left:4px solid {sc_col};display:flex;align-items:center;gap:14px"><div style="min-width:52px;text-align:center;background:white;border-radius:10px;padding:6px 0;box-shadow:0 2px 8px rgba(0,0,0,.06)"><div style="font-size:1.2rem;font-weight:900;color:{sc_col}">{sc}</div><div style="font-size:.6rem;color:#94a3b8">/100</div></div><div style="flex:1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">{poste}</div><div style="font-size:.75rem;color:#94a3b8;margin-top:2px">{date_str}</div>{em_html}</div></div>', unsafe_allow_html=True)
 
             # Chat questions
             if chats:
@@ -273,11 +264,7 @@ if st.session_state.admin_view:
                     q = c.get("question", "")[:120]
                     r = c.get("response", "")[:200]
                     date_str = c.get("date", "")
-                    st.markdown(f"""<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:rgba(99,102,241,.04);border-left:4px solid #6366f1">
-                        <div style="font-weight:700;color:#1e293b;font-size:.9rem">💬 {q}</div>
-                        <div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.4">{r}...</div>
-                        <div style="font-size:.7rem;color:#94a3b8;margin-top:6px">{date_str}</div>
-                    </div>""", unsafe_allow_html=True)
+                    st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:rgba(99,102,241,.04);border-left:4px solid #6366f1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">💬 {q}</div><div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.4">{r}...</div><div style="font-size:.7rem;color:#94a3b8;margin-top:6px">{date_str}</div></div>', unsafe_allow_html=True)
         else:
             st.markdown("""<div style="text-align:center;padding:3rem 1rem">
                 <div style="font-size:3rem;margin-bottom:1rem">📊</div>

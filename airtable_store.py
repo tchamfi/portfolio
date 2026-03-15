@@ -115,12 +115,13 @@ def log_chat(question, response, lang="fr", chunks_used=0):
             "poste": "",
             "langue": lang,
             "chunks": chunks_used,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "email": email
         }}]}, timeout=10)
     except Exception as e:
         print(f"[analytics] log_chat error: {e}")
 
-def log_matching(question, response, score=0, job_title="", lang="fr", chunks_used=0):
+def log_matching(question, response, score=0, job_title="", lang="fr", chunks_used=0, email=""):
     """Log a matching interaction to Analytics table."""
     from datetime import datetime
     url = f"{API_URL}/{BASE_ID}/{ANALYTICS_TABLE}"
@@ -133,7 +134,8 @@ def log_matching(question, response, score=0, job_title="", lang="fr", chunks_us
             "poste": job_title[:200],
             "langue": lang,
             "chunks": chunks_used,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "email": email
         }}]}, timeout=10)
     except Exception as e:
         print(f"[analytics] log_matching error: {e}")

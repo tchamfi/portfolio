@@ -374,105 +374,104 @@ with tab_dict["profil"]:
 
 # --- TAB 2 : CHAT RAG ---
 if "chat" in tab_dict:
- with tab_dict["chat"]:
-    st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
-    chat_html='<div class="chat-box" id="chat-box">'
-    for msg in st.session_state.messages:
-        cls=msg["role"]; who="Lionel" if cls=="assistant" else ("You" if lang=="en" else "Vous")
-        c=msg["content"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-        c=re.sub(r'\*\*(.+?)\*\*',r'<strong>\1</strong>',c); c=re.sub(r'^#+\s*','',c,flags=re.MULTILINE); c=c.replace("\n","<br>")
-        chat_html+=f'<div class="chat-msg {cls}"><div class="msg-who">{who}</div>{c}</div>'
-    chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
-    st.markdown(chat_html,unsafe_allow_html=True)
-    typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
-    if typed:
-        st.session_state.messages.append({"role":"user","content":typed})
-        try: resp=ask(typed+get_config_context())
-        except Exception as e: resp=f"Error: {e}"
-        try: log_chat(typed, resp, lang=lang, chunks_used=12)
-        except: pass
-        st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
+    with tab_dict["chat"]:
+        st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
+        chat_html='<div class="chat-box" id="chat-box">'
+        for msg in st.session_state.messages:
+            cls=msg["role"]; who="Lionel" if cls=="assistant" else ("You" if lang=="en" else "Vous")
+            c=msg["content"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            c=re.sub(r'\*\*(.+?)\*\*',r'<strong>\1</strong>',c); c=re.sub(r'^#+\s*','',c,flags=re.MULTILINE); c=c.replace("\n","<br>")
+            chat_html+=f'<div class="chat-msg {cls}"><div class="msg-who">{who}</div>{c}</div>'
+        chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
+        st.markdown(chat_html,unsafe_allow_html=True)
+        typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
+        if typed:
+            st.session_state.messages.append({"role":"user","content":typed})
+            try: resp=ask(typed+get_config_context())
+            except Exception as e: resp=f"Error: {e}"
+            try: log_chat(typed, resp, lang=lang, chunks_used=12)
+            except: pass
+            st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
 
 # --- TAB 3 : MATCHING ---
 if "matching" in tab_dict:
- with tab_dict["matching"]:
-    if is_private: st.markdown('<span style="font-family:JetBrains Mono;font-size:.7rem;padding:4px 12px;border-radius:100px;border:1px solid rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.06)">PRIVATE</span>',unsafe_allow_html=True)
-    matching_title = "Profile Matching — How compatible am I with your position?" if lang=="en" else "Matching de profil — Suis-je le bon candidat pour votre poste ?"
-    matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes compétences et mon expérience, et générer un score de compatibilité avec les arguments clés."
-    st.markdown(f'<div class="info-box"><div class="info-title">{matching_title}</div><div class="info-desc">{matching_desc}</div></div>',unsafe_allow_html=True)
-    ci,co=st.columns([1,1.5])
-    with ci:
-        job=st.text_area("x",height=300,placeholder="Paste your full job description here: title, responsibilities, required skills, experience level, tech stack..." if lang=="en" else "Collez ici votre fiche de poste complète : intitulé, responsabilités, compétences requises, niveau d'expérience, stack technique...",key="job_input",label_visibility="collapsed")
-        visitor_email=st.text_input("Your email (optional)" if lang=="en" else "Votre email (optionnel)",key="visitor_email",placeholder="recruteur@entreprise.com")
-        st.caption("Your email will only be used to contact you about this opportunity. It will not be shared or used for marketing." if lang=="en" else "Votre email sera utilisé uniquement pour vous recontacter dans le cadre de cette opportunité. Il ne sera ni partagé ni utilisé à des fins marketing.")
-        if is_private: rtype=st.radio("Format",["email","pitch"],horizontal=True,key="rtype")
-        else: rtype="email"
-        run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
-    with co:
-        if run and job.strip():
-            with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
-            # Log matching
-            try:
-                _res=st.session_state.agent_results; _m=_res.get("matching",{})
-                log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email)
-            except: pass
-        if "agent_results" in st.session_state:
-            res=st.session_state.agent_results; matching=res.get("matching")
-            if matching and not matching.get("error"):
-                score=matching.get("score_global",0); sc="low" if score<60 else ("mid" if score<80 else "high")
-                st.markdown(f'<div class="score-box {sc}"><div class="score-num">{score}/100</div><div class="score-sub">Match</div></div>',unsafe_allow_html=True)
-                if is_private:
-                    m1,m2=st.columns(2)
-                    with m1:
+    with tab_dict["matching"]:
+        if is_private: st.markdown('<span style="font-family:JetBrains Mono;font-size:.7rem;padding:4px 12px;border-radius:100px;border:1px solid rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.06)">PRIVATE</span>',unsafe_allow_html=True)
+        matching_title = "Profile Matching — How compatible am I with your position?" if lang=="en" else "Matching de profil — Suis-je le bon candidat pour votre poste ?"
+        matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes compétences et mon expérience, et générer un score de compatibilité avec les arguments clés."
+        st.markdown(f'<div class="info-box"><div class="info-title">{matching_title}</div><div class="info-desc">{matching_desc}</div></div>',unsafe_allow_html=True)
+        ci,co=st.columns([1,1.5])
+        with ci:
+            job=st.text_area("x",height=300,placeholder="Paste your full job description here: title, responsibilities, required skills, experience level, tech stack..." if lang=="en" else "Collez ici votre fiche de poste complète : intitulé, responsabilités, compétences requises, niveau d'expérience, stack technique...",key="job_input",label_visibility="collapsed")
+            visitor_email=st.text_input("Your email (optional)" if lang=="en" else "Votre email (optionnel)",key="visitor_email",placeholder="recruteur@entreprise.com")
+            st.caption("Your email will only be used to contact you about this opportunity. It will not be shared or used for marketing." if lang=="en" else "Votre email sera utilisé uniquement pour vous recontacter dans le cadre de cette opportunité. Il ne sera ni partagé ni utilisé à des fins marketing.")
+            if is_private: rtype=st.radio("Format",["email","pitch"],horizontal=True,key="rtype")
+            else: rtype="email"
+            run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
+        with co:
+            if run and job.strip():
+                with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
+                try:
+                    _res=st.session_state.agent_results; _m=_res.get("matching",{})
+                    log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email)
+                except: pass
+            if "agent_results" in st.session_state:
+                res=st.session_state.agent_results; matching=res.get("matching")
+                if matching and not matching.get("error"):
+                    score=matching.get("score_global",0); sc="low" if score<60 else ("mid" if score<80 else "high")
+                    st.markdown(f'<div class="score-box {sc}"><div class="score-num">{score}/100</div><div class="score-sub">Match</div></div>',unsafe_allow_html=True)
+                    if is_private:
+                        m1,m2=st.columns(2)
+                        with m1:
+                            for p in matching.get("points_forts",[]): st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
+                        with m2:
+                            for p in matching.get("points_attention",[]): st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
+                        st.markdown("---"); st.code(res.get("response",""),language=None)
+                    else:
                         for p in matching.get("points_forts",[]): st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
-                    with m2:
-                        for p in matching.get("points_attention",[]): st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
-                    st.markdown("---"); st.code(res.get("response",""),language=None)
-                else:
-                    for p in matching.get("points_forts",[]): st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
-        elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
+            elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---
 if "rdv" in tab_dict:
- with tab_dict["rdv"]:
-    cal=cfg.get("calendly","")
-    if cal:
-        st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Réservez un appel découverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un créneau qui vous convient. 30 minutes pour échanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
-        components.html(f'<iframe src="{cal}" width="100%" height="680" frameborder="0" style="border-radius:16px;"></iframe>',height=700)
+    with tab_dict["rdv"]:
+        cal=cfg.get("calendly","")
+        if cal:
+            st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Réservez un appel découverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un créneau qui vous convient. 30 minutes pour échanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
+            components.html(f'<iframe src="{cal}" width="100%" height="680" frameborder="0" style="border-radius:16px;"></iframe>',height=700)
 
 # --- TAB 5 : RECOMMANDATIONS ---
 if "recos" in tab_dict:
- with tab_dict["recos"]:
-    approved=[r for r in recos if r.get("approved")]
-    reco_html=""
-    for r in approved:
-        li=r.get("linkedin","")
-        name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{r["name"]}</a>' if li else f'<span class="reco-name">{r["name"]}</span>'
-        verified='<span class="reco-verified">&#10003; Profil vérifié</span>' if li else ''
-        collab=f'<span class="reco-collab">{r.get("collab_period","")}</span>' if r.get("collab_period") else ""
-        reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div>'
-    if reco_html:
-        st.markdown(reco_html,unsafe_allow_html=True)
-    else:
-        st.markdown(f'<p style="color:#94a3b8;padding:2rem 0">{"No recommendations yet. Be the first!" if lang=="en" else "Aucune recommandation pour le moment. Soyez le premier !"}</p>',unsafe_allow_html=True)
-    st.markdown("---")
-    with st.form("reco_form",clear_on_submit=True):
-        st.markdown(f"**{'Leave a recommendation' if lang=='en' else 'Laisser une recommandation'}**")
-        rc1,rc2=st.columns(2)
-        with rc1: rf_n=st.text_input("Name" if lang=="en" else "Nom",key="rf_n"); rf_t=st.text_input("Title" if lang=="en" else "Poste",key="rf_t"); rf_li=st.text_input("LinkedIn URL",key="rf_li",placeholder="https://linkedin.com/in/..."); st.caption("💡 Recommended: your LinkedIn profile strengthens your testimonial credibility" if lang=="en" else "💡 Recommandé : votre profil LinkedIn renforce la crédibilité de votre témoignage")
-        with rc2: rf_c=st.text_input("Company" if lang=="en" else "Entreprise",key="rf_c"); rf_r=st.selectbox("Relation",["Client","Collègue","Manager","Autre"],key="rf_r"); rf_cp=st.text_input("Collaboration period" if lang=="en" else "Période de collaboration",key="rf_cp",placeholder="2023-2024")
-        rf_tx=st.text_area("Your recommendation" if lang=="en" else "Votre recommandation",height=80,key="rf_tx")
-        submitted=st.form_submit_button("Submit" if lang=="en" else "Envoyer",use_container_width=True)
-        if submitted:
-            if rf_n and rf_tx:
-                add_reco({"name":rf_n,"title":rf_t,"company":rf_c,"relation":rf_r,"text":rf_tx,"linkedin":rf_li,"collab_period":rf_cp,"date":datetime.now().strftime("%Y-%m")})
-                st.session_state.reco_submitted=True
-                st.session_state.active_tab=tab_keys.index("recos") if "recos" in tab_keys else 0; st.rerun()
-            else:
-                st.warning("Please fill in your name and recommendation." if lang=="en" else "Veuillez renseigner votre nom et votre recommandation.")
-    if st.session_state.get("reco_submitted"):
-        st.success("Thank you! Your recommendation has been submitted and will appear after validation." if lang=="en" else "Merci ! Votre recommandation a été soumise et apparaîtra après validation.")
-        del st.session_state.reco_submitted
+    with tab_dict["recos"]:
+        approved=[r for r in recos if r.get("approved")]
+        reco_html=""
+        for r in approved:
+            li=r.get("linkedin","")
+            name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{r["name"]}</a>' if li else f'<span class="reco-name">{r["name"]}</span>'
+            verified='<span class="reco-verified">&#10003; Profil vérifié</span>' if li else ''
+            collab=f'<span class="reco-collab">{r.get("collab_period","")}</span>' if r.get("collab_period") else ""
+            reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div>'
+        if reco_html:
+            st.markdown(reco_html,unsafe_allow_html=True)
+        else:
+            st.markdown(f'<p style="color:#94a3b8;padding:2rem 0">{"No recommendations yet. Be the first!" if lang=="en" else "Aucune recommandation pour le moment. Soyez le premier !"}</p>',unsafe_allow_html=True)
+        st.markdown("---")
+        with st.form("reco_form",clear_on_submit=True):
+            st.markdown(f"**{'Leave a recommendation' if lang=='en' else 'Laisser une recommandation'}**")
+            rc1,rc2=st.columns(2)
+            with rc1: rf_n=st.text_input("Name" if lang=="en" else "Nom",key="rf_n"); rf_t=st.text_input("Title" if lang=="en" else "Poste",key="rf_t"); rf_li=st.text_input("LinkedIn URL",key="rf_li",placeholder="https://linkedin.com/in/..."); st.caption("💡 Recommended: your LinkedIn profile strengthens your testimonial credibility" if lang=="en" else "💡 Recommandé : votre profil LinkedIn renforce la crédibilité de votre témoignage")
+            with rc2: rf_c=st.text_input("Company" if lang=="en" else "Entreprise",key="rf_c"); rf_r=st.selectbox("Relation",["Client","Collègue","Manager","Autre"],key="rf_r"); rf_cp=st.text_input("Collaboration period" if lang=="en" else "Période de collaboration",key="rf_cp",placeholder="2023-2024")
+            rf_tx=st.text_area("Your recommendation" if lang=="en" else "Votre recommandation",height=80,key="rf_tx")
+            submitted=st.form_submit_button("Submit" if lang=="en" else "Envoyer",use_container_width=True)
+            if submitted:
+                if rf_n and rf_tx:
+                    add_reco({"name":rf_n,"title":rf_t,"company":rf_c,"relation":rf_r,"text":rf_tx,"linkedin":rf_li,"collab_period":rf_cp,"date":datetime.now().strftime("%Y-%m")})
+                    st.session_state.reco_submitted=True
+                    st.session_state.active_tab=tab_keys.index("recos") if "recos" in tab_keys else 0; st.rerun()
+                else:
+                    st.warning("Please fill in your name and recommendation." if lang=="en" else "Veuillez renseigner votre nom et votre recommandation.")
+        if st.session_state.get("reco_submitted"):
+            st.success("Thank you! Your recommendation has been submitted and will appear after validation." if lang=="en" else "Merci ! Votre recommandation a été soumise et apparaîtra après validation.")
+            del st.session_state.reco_submitted
 
 # AUTO-CLICK TAB after rerun
 if active_tab is not None:

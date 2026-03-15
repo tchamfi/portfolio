@@ -41,7 +41,7 @@ Posez-moi vos questions, par exemple :
 - "Quelles certifications possede-t-il ?"
 - "Quel est son TJM et sa disponibilite ?"
 
-Je reponds en me basant sur son parcours reel."""
+Je réponds en me basant sur son parcours réel."""
 
 WELCOME_EN = """Hello! I'm Lionel TCHAMFONG's AI assistant.
 
@@ -57,7 +57,6 @@ CHEVRON_SVG = '<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L1
 
 
 def get_config_context():
-    """Build context string injected into every RAG and agent call."""
     cfg = st.session_state.config
     lang = st.session_state.get("lang", "fr")
     if lang == "en":
@@ -71,14 +70,11 @@ def get_config_context():
     if isinstance(exp_list, list):
         ec = [e["company"] for e in exp_list if e.get("status") == "En cours"]
         et = [e["company"] for e in exp_list if e.get("status") == "Terminee"]
-        if ec:
-            lines.append(f"En cours : {', '.join(ec)}")
-        if et:
-            lines.append(f"Terminees : {', '.join(et)}")
+        if ec: lines.append(f"En cours : {', '.join(ec)}")
+        if et: lines.append(f"Terminees : {', '.join(et)}")
     return "\n[INFO]\n" + "\n".join(lines)
 
 
 def swap(lst, i, j):
-    """Swap two elements in a list."""
     if 0 <= i < len(lst) and 0 <= j < len(lst):
         lst[i], lst[j] = lst[j], lst[i]

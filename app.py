@@ -71,7 +71,7 @@ if st.session_state.admin_view:
         dispo_opts=["Immediat","Sous 2 semaines","Sous 1 mois","En mission"]; remote_opts=["IDF + Remote","Full Remote","Sur site uniquement","Hybride"]
         cur_dispo=cfg.get("disponibilite","Immediat"); cur_remote=cfg.get("remote","IDF + Remote")
         gc1,gc2=st.columns(2)
-        with gc1: new_tjm=st.text_input("TJM",value=cfg.get("tjm",""),key="a_tjm"); new_dispo=st.selectbox("Disponibilite",dispo_opts,index=dispo_opts.index(cur_dispo) if cur_dispo in dispo_opts else 0,key="a_dispo"); new_remote=st.selectbox("Mode",remote_opts,index=remote_opts.index(cur_remote) if cur_remote in remote_opts else 0,key="a_remote")
+        with gc1: new_tjm=st.text_input("TJM",value=cfg.get("tjm",""),key="a_tjm"); new_dispo=st.selectbox("Disponibilité",dispo_opts,index=dispo_opts.index(cur_dispo) if cur_dispo in dispo_opts else 0,key="a_dispo"); new_remote=st.selectbox("Mode",remote_opts,index=remote_opts.index(cur_remote) if cur_remote in remote_opts else 0,key="a_remote")
         with gc2: new_linkedin=st.text_input("LinkedIn",value=cfg.get("linkedin",""),key="a_li"); new_email=st.text_input("Email",value=cfg.get("email",""),key="a_em"); new_phone=st.text_input("Tel",value=cfg.get("phone",""),key="a_ph"); new_calendly=st.text_input("Calendly",value=cfg.get("calendly",""),key="a_cal")
         vc1,vc2=st.columns(2)
         with vc1: new_show_tjm=st.checkbox("Afficher TJM",value=cfg.get("show_tjm",True),key="a_stjm")
@@ -161,7 +161,7 @@ if st.session_state.admin_view:
             with cc2:
                 st.markdown("**EN**"); cs_ten=st.text_input("Title EN",value=cs.get("title_en",""),key=f"cten{av}_{i}"); cs_ren=st.text_input("Role EN",value=cs.get("role_en",""),key=f"cren{av}_{i}"); cs_chen=st.text_area("Challenge EN",value=cs.get("challenge_en",""),key=f"cchen{av}_{i}",height=70); cs_apen=st.text_area("Approach EN",value=cs.get("approach_en",""),key=f"capen{av}_{i}",height=70)
                 imp_en=", ".join(cs.get("impact_en",[])) if isinstance(cs.get("impact_en"),list) else ""; cs_impen=st.text_area("Impacts EN",value=imp_en,key=f"cien{av}_{i}",height=50)
-            cs_per=st.text_input("Periode",value=cs.get("period",""),key=f"cper{av}_{i}"); cs_tech=st.text_input("Stack",value=", ".join(cs.get("tech",[])) if isinstance(cs.get("tech"),list) else "",key=f"ctech{av}_{i}")
+            cs_per=st.text_input("Période",value=cs.get("period",""),key=f"cper{av}_{i}"); cs_tech=st.text_input("Stack",value=", ".join(cs.get("tech",[])) if isinstance(cs.get("tech"),list) else "",key=f"ctech{av}_{i}")
             new_cs.append({"title_fr":cs_tfr,"title_en":cs_ten,"role_fr":cs_rfr,"role_en":cs_ren,"period":cs_per,"challenge_fr":cs_chfr,"challenge_en":cs_chen,"approach_fr":cs_apfr,"approach_en":cs_apen,"impact_fr":[x.strip() for x in cs_impfr.split(",") if x.strip()],"impact_en":[x.strip() for x in cs_impen.split(",") if x.strip()],"tech":[x.strip() for x in cs_tech.split(",") if x.strip()]})
             st.markdown("---")
         if action_cs:
@@ -181,8 +181,8 @@ if st.session_state.admin_view:
             st.markdown(f"**{'✅' if r.get('approved') else '⏳'} {r.get('name','')}** {li_icon}")
             rc1,rc2,rc3=st.columns([2,2,1])
             with rc1: rn=st.text_input("Nom",value=r.get("name",""),key=f"arn{i}"); rt=st.text_input("Poste",value=r.get("title",""),key=f"art{i}"); rli=st.text_input("LinkedIn",value=r.get("linkedin",""),key=f"arli{i}")
-            with rc2: rco=st.text_input("Entreprise",value=r.get("company",""),key=f"arco{i}"); rrl=st.selectbox("Relation",["Client","Collegue","Manager","Autre"],index=["Client","Collegue","Manager","Autre"].index(r.get("relation","Autre")) if r.get("relation","Autre") in ["Client","Collegue","Manager","Autre"] else 3,key=f"arrl{i}"); rcp=st.text_input("Periode",value=r.get("collab_period",""),key=f"arcp{i}")
-            with rc3: rap=st.checkbox("Approuvee",value=r.get("approved",False),key=f"arap{i}")
+            with rc2: rco=st.text_input("Entreprise",value=r.get("company",""),key=f"arco{i}"); rrl=st.selectbox("Relation",["Client","Collègue","Manager","Autre"],index=["Client","Collègue","Manager","Autre"].index(r.get("relation","Autre")) if r.get("relation","Autre") in ["Client","Collègue","Manager","Autre"] else 3,key=f"arrl{i}"); rcp=st.text_input("Période",value=r.get("collab_period",""),key=f"arcp{i}")
+            with rc3: rap=st.checkbox("Approuvée",value=r.get("approved",False),key=f"arap{i}")
             rtx=st.text_area("Texte",value=r.get("text",""),key=f"artx{i}",height=80)
             new_recos.append({"id":r.get("id"),"name":rn,"title":rt,"company":rco,"relation":rrl,"text":rtx,"approved":rap,"date":r.get("date",""),"linkedin":rli,"collab_period":rcp}); st.markdown("---")
 
@@ -206,7 +206,8 @@ if st.session_state.admin_view:
                 st.markdown("**Derniers matchings**")
                 for m in matchings[:10]:
                     sc = m.get("score", "?")
-                    st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(99,102,241,.05);border-left:3px solid #6366f1"><strong>{m.get("poste","Sans titre")}</strong> — <span style="color:#6366f1;font-weight:700">{sc}/100</span> <span style="color:#94a3b8;font-size:.8rem">({m.get("date","")})</span></div>', unsafe_allow_html=True)
+                    em = f' — 📧 {m.get("email")}' if m.get("email") else ""
+                    st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(99,102,241,.05);border-left:3px solid #6366f1"><strong>{m.get("poste","Sans titre")}</strong> — <span style="color:#6366f1;font-weight:700">{sc}/100</span>{em} <span style="color:#94a3b8;font-size:.8rem">({m.get("date","")})</span></div>', unsafe_allow_html=True)
             # Chat questions
             if chats:
                 st.markdown("---")
@@ -215,7 +216,7 @@ if st.session_state.admin_view:
                     q = c.get("question", "")[:100]
                     st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(34,197,94,.05);border-left:3px solid #16a34a"><strong>{q}</strong> <span style="color:#94a3b8;font-size:.8rem">({c.get("date","")})</span></div>', unsafe_allow_html=True)
         else:
-            st.info("Aucune interaction enregistree. Les prochaines questions et matchings apparaitront ici.")
+            st.info("Aucune interaction enregistrée. Les prochaines questions et matchings apparaîtront ici.")
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
         nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"_record_ids":cfg.get("_record_ids",{})}
@@ -225,7 +226,7 @@ if st.session_state.admin_view:
         if "agent_results" in st.session_state: del st.session_state.agent_results
         st.session_state.save_ok=True; st.rerun()
     if st.session_state.get("save_ok"):
-        st.toast("Sauvegarde Airtable reussie !", icon="✅")
+        st.toast("Sauvegarde Airtable réussie !", icon="✅")
         del st.session_state.save_ok
     st.stop()
 
@@ -309,7 +310,7 @@ with tab_profil:
 
 # --- TAB 2 : CHAT RAG ---
 with tab_chat:
-    st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA repond en se basant sur mon parcours reel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
     chat_html='<div class="chat-box" id="chat-box">'
     for msg in st.session_state.messages:
         cls=msg["role"]; who="Lionel" if cls=="assistant" else ("You" if lang=="en" else "Vous")
@@ -331,11 +332,13 @@ with tab_chat:
 with tab_agent:
     if is_private: st.markdown('<span style="font-family:JetBrains Mono;font-size:.7rem;padding:4px 12px;border-radius:100px;border:1px solid rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.06)">PRIVATE</span>',unsafe_allow_html=True)
     matching_title = "Profile Matching — How compatible am I with your position?" if lang=="en" else "Matching de profil — Suis-je le bon candidat pour votre poste ?"
-    matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes competences et mon experience, et generer un score de compatibilite avec les arguments cles."
+    matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes compétences et mon expérience, et générer un score de compatibilité avec les arguments clés."
     st.markdown(f'<div class="info-box"><div class="info-title">{matching_title}</div><div class="info-desc">{matching_desc}</div></div>',unsafe_allow_html=True)
     ci,co=st.columns([1,1.5])
     with ci:
-        job=st.text_area("x",height=350,placeholder="Paste your full job description here: title, responsibilities, required skills, experience level, tech stack..." if lang=="en" else "Collez ici votre fiche de poste complete : intitule, responsabilites, competences requises, niveau d'experience, stack technique...",key="job_input",label_visibility="collapsed")
+        job=st.text_area("x",height=300,placeholder="Paste your full job description here: title, responsibilities, required skills, experience level, tech stack..." if lang=="en" else "Collez ici votre fiche de poste complète : intitulé, responsabilités, compétences requises, niveau d'expérience, stack technique...",key="job_input",label_visibility="collapsed")
+        visitor_email=st.text_input("Your email (optional)" if lang=="en" else "Votre email (optionnel)",key="visitor_email",placeholder="recruteur@entreprise.com")
+        st.caption("Your email will only be used to contact you about this opportunity. It will not be shared or used for marketing." if lang=="en" else "Votre email sera utilisé uniquement pour vous recontacter dans le cadre de cette opportunité. Il ne sera ni partagé ni utilisé à des fins marketing.")
         if is_private: rtype=st.radio("Format",["email","pitch"],horizontal=True,key="rtype")
         else: rtype="email"
         run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
@@ -345,7 +348,7 @@ with tab_agent:
             # Log matching
             try:
                 _res=st.session_state.agent_results; _m=_res.get("matching",{})
-                log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15)
+                log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email)
             except: pass
         if "agent_results" in st.session_state:
             res=st.session_state.agent_results; matching=res.get("matching")
@@ -361,13 +364,13 @@ with tab_agent:
                     st.markdown("---"); st.code(res.get("response",""),language=None)
                 else:
                     for p in matching.get("points_forts",[]): st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
-        elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complete ci-dessus.")
+        elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---
 with tab_rdv:
     cal=cfg.get("calendly","")
     if cal:
-        st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Reservez un appel decouverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un creneau qui vous convient. 30 minutes pour echanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
+        st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Réservez un appel découverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un créneau qui vous convient. 30 minutes pour échanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
         components.html(f'<iframe src="{cal}" width="100%" height="680" frameborder="0" style="border-radius:16px;"></iframe>',height=700)
 
 # --- TAB 5 : RECOMMANDATIONS ---
@@ -378,7 +381,7 @@ with tab_recos:
         for r in approved:
             li=r.get("linkedin","")
             name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{r["name"]}</a>' if li else f'<span class="reco-name">{r["name"]}</span>'
-            verified='<span class="reco-verified">&#10003; Profil verifie</span>' if li else ''
+            verified='<span class="reco-verified">&#10003; Profil vérifié</span>' if li else ''
             collab=f'<span class="reco-collab">{r.get("collab_period","")}</span>' if r.get("collab_period") else ""
             reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div>'
         if reco_html:
@@ -390,8 +393,8 @@ with tab_recos:
     with st.form("reco_form",clear_on_submit=True):
         st.markdown(f"**{'Leave a recommendation' if lang=='en' else 'Laisser une recommandation'}**")
         rc1,rc2=st.columns(2)
-        with rc1: rf_n=st.text_input("Name" if lang=="en" else "Nom",key="rf_n"); rf_t=st.text_input("Title" if lang=="en" else "Poste",key="rf_t"); rf_li=st.text_input("LinkedIn URL",key="rf_li",placeholder="https://linkedin.com/in/..."); st.caption("💡 Recommended: your LinkedIn profile strengthens your testimonial credibility" if lang=="en" else "💡 Recommande : votre profil LinkedIn renforce la credibilite de votre temoignage")
-        with rc2: rf_c=st.text_input("Company" if lang=="en" else "Entreprise",key="rf_c"); rf_r=st.selectbox("Relation",["Client","Collegue","Manager","Autre"],key="rf_r"); rf_cp=st.text_input("Collaboration period" if lang=="en" else "Periode de collaboration",key="rf_cp",placeholder="2023-2024")
+        with rc1: rf_n=st.text_input("Name" if lang=="en" else "Nom",key="rf_n"); rf_t=st.text_input("Title" if lang=="en" else "Poste",key="rf_t"); rf_li=st.text_input("LinkedIn URL",key="rf_li",placeholder="https://linkedin.com/in/..."); st.caption("💡 Recommended: your LinkedIn profile strengthens your testimonial credibility" if lang=="en" else "💡 Recommandé : votre profil LinkedIn renforce la crédibilité de votre témoignage")
+        with rc2: rf_c=st.text_input("Company" if lang=="en" else "Entreprise",key="rf_c"); rf_r=st.selectbox("Relation",["Client","Collègue","Manager","Autre"],key="rf_r"); rf_cp=st.text_input("Collaboration period" if lang=="en" else "Période de collaboration",key="rf_cp",placeholder="2023-2024")
         rf_tx=st.text_area("Your recommendation" if lang=="en" else "Votre recommandation",height=80,key="rf_tx")
         submitted=st.form_submit_button("Submit" if lang=="en" else "Envoyer",use_container_width=True)
         if submitted:
@@ -402,7 +405,7 @@ with tab_recos:
             else:
                 st.warning("Please fill in your name and recommendation." if lang=="en" else "Veuillez renseigner votre nom et votre recommandation.")
     if st.session_state.get("reco_submitted"):
-        st.success("Thank you! Your recommendation has been submitted and will appear after validation." if lang=="en" else "Merci ! Votre recommandation a ete soumise et apparaitra apres validation.")
+        st.success("Thank you! Your recommendation has been submitted and will appear after validation." if lang=="en" else "Merci ! Votre recommandation a été soumise et apparaîtra après validation.")
         del st.session_state.reco_submitted
 
 # AUTO-CLICK TAB after rerun

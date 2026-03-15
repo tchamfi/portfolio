@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 from datetime import datetime
 from rag_pipeline import ask, create_chroma_collection
 from agent import run_agent
-from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos
+from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
 from config import (PRIVATE_CODE, FALLBACK_CONFIG, WELCOME_FR, WELCOME_EN,
                     CHEVRON_SVG, get_config_context, swap)
@@ -55,7 +55,7 @@ if st.session_state.admin_view:
     if "admin_v" not in st.session_state: st.session_state.admin_v=0
     av=st.session_state.admin_v  # version counter for widget keys
 
-    at1,at2,at3,at4,at5,at6,at7=st.tabs(["📋 General","👁 Visibilite","📝 Profil","📊 Metriques","💼 Experiences","🎯 Case Studies","⭐ Recos"])
+    at1,at2,at3,at4,at5,at6,at7,at8=st.tabs(["📋 General","👁 Visibilite","📝 Profil","📊 Metriques","💼 Experiences","🎯 Case Studies","⭐ Recos","📈 Analytics"])
 
     with at1:
         st.markdown("**Hero**")
@@ -186,6 +186,37 @@ if st.session_state.admin_view:
             rtx=st.text_area("Texte",value=r.get("text",""),key=f"artx{i}",height=80)
             new_recos.append({"id":r.get("id"),"name":rn,"title":rt,"company":rco,"relation":rrl,"text":rtx,"approved":rap,"date":r.get("date",""),"linkedin":rli,"collab_period":rcp}); st.markdown("---")
 
+    with at8:
+        analytics_data = load_analytics()
+        if analytics_data:
+            chats = [a for a in analytics_data if a["type"] == "chat"]
+            matchings = [a for a in analytics_data if a["type"] == "matching"]
+            st.markdown(f'<div style="display:flex;gap:1rem;margin-bottom:1.5rem">', unsafe_allow_html=True)
+            ac1, ac2, ac3 = st.columns(3)
+            with ac1: st.metric("Total interactions", len(analytics_data))
+            with ac2: st.metric("Questions chat", len(chats))
+            with ac3: st.metric("Matchings", len(matchings))
+            # Matching scores
+            if matchings:
+                scores = [m["score"] for m in matchings if m.get("score")]
+                if scores:
+                    avg_score = round(sum(scores) / len(scores))
+                    st.markdown(f"**Score moyen matching : {avg_score}/100**")
+                st.markdown("---")
+                st.markdown("**Derniers matchings**")
+                for m in matchings[:10]:
+                    sc = m.get("score", "?")
+                    st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(99,102,241,.05);border-left:3px solid #6366f1"><strong>{m.get("poste","Sans titre")}</strong> — <span style="color:#6366f1;font-weight:700">{sc}/100</span> <span style="color:#94a3b8;font-size:.8rem">({m.get("date","")})</span></div>', unsafe_allow_html=True)
+            # Chat questions
+            if chats:
+                st.markdown("---")
+                st.markdown("**Dernieres questions**")
+                for c in chats[:15]:
+                    q = c.get("question", "")[:100]
+                    st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(34,197,94,.05);border-left:3px solid #16a34a"><strong>{q}</strong> <span style="color:#94a3b8;font-size:.8rem">({c.get("date","")})</span></div>', unsafe_allow_html=True)
+        else:
+            st.info("Aucune interaction enregistree. Les prochaines questions et matchings apparaitront ici.")
+
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
         nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"_record_ids":cfg.get("_record_ids",{})}
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
@@ -292,6 +323,8 @@ with tab_chat:
         st.session_state.messages.append({"role":"user","content":typed})
         try: resp=ask(typed+get_config_context())
         except Exception as e: resp=f"Error: {e}"
+        try: log_chat(typed, resp, lang=lang, chunks_used=12)
+        except: pass
         st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=1; st.rerun()
 
 # --- TAB 3 : MATCHING ---
@@ -309,6 +342,11 @@ with tab_agent:
     with co:
         if run and job.strip():
             with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
+            # Log matching
+            try:
+                _res=st.session_state.agent_results; _m=_res.get("matching",{})
+                log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15)
+            except: pass
         if "agent_results" in st.session_state:
             res=st.session_state.agent_results; matching=res.get("matching")
             if matching and not matching.get("error"):

@@ -97,3 +97,53 @@ def update_all_recos(recos):
     for i in range(0, len(records), 10):
         try: requests.patch(url, headers=headers(), json={"records": records[i:i+10]}, timeout=10)
         except Exception as e: print(f"[airtable] update_recos error: {e}")
+
+# ================================================================
+# ANALYTICS
+# ================================================================
+ANALYTICS_TABLE = "tblOMs2pa8UFK9UKY"
+
+def log_chat(question, response, lang="fr", chunks_used=0):
+    """Log a chat interaction to Analytics table."""
+    from datetime import datetime
+    url = f"{API_URL}/{BASE_ID}/{ANALYTICS_TABLE}"
+    try:
+        requests.post(url, headers=headers(), json={"records": [{"fields": {
+            "type": "chat",
+            "question": question[:2000],
+            "response": response[:5000],
+            "poste": "",
+            "langue": lang,
+            "chunks": chunks_used,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }}]}, timeout=10)
+    except Exception as e:
+        print(f"[analytics] log_chat error: {e}")
+
+def log_matching(question, response, score=0, job_title="", lang="fr", chunks_used=0):
+    """Log a matching interaction to Analytics table."""
+    from datetime import datetime
+    url = f"{API_URL}/{BASE_ID}/{ANALYTICS_TABLE}"
+    try:
+        requests.post(url, headers=headers(), json={"records": [{"fields": {
+            "type": "matching",
+            "question": question[:2000],
+            "response": response[:5000],
+            "score": score,
+            "poste": job_title[:200],
+            "langue": lang,
+            "chunks": chunks_used,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }}]}, timeout=10)
+    except Exception as e:
+        print(f"[analytics] log_matching error: {e}")
+
+def load_analytics():
+    """Load all analytics records."""
+    url = f"{API_URL}/{BASE_ID}/{ANALYTICS_TABLE}"
+    try:
+        resp = requests.get(url, headers=headers(), params={"pageSize": 100, "sort[0][field]": "date", "sort[0][direction]": "desc"}, timeout=10)
+        resp.raise_for_status(); data = resp.json()
+    except Exception as e:
+        print(f"[airtable] load_analytics error: {e}"); return []
+    return [{"type": rec.get("fields",{}).get("type",""), "question": rec.get("fields",{}).get("question",""), "response": rec.get("fields",{}).get("response",""), "score": rec.get("fields",{}).get("score"), "poste": rec.get("fields",{}).get("poste",""), "langue": rec.get("fields",{}).get("langue",""), "chunks": rec.get("fields",{}).get("chunks",0), "date": rec.get("fields",{}).get("date","")} for rec in data.get("records",[])]

@@ -200,32 +200,90 @@ if st.session_state.admin_view:
         if analytics_data:
             chats = [a for a in analytics_data if a["type"] == "chat"]
             matchings = [a for a in analytics_data if a["type"] == "matching"]
-            st.markdown(f'<div style="display:flex;gap:1rem;margin-bottom:1.5rem">', unsafe_allow_html=True)
-            ac1, ac2, ac3 = st.columns(3)
-            with ac1: st.metric("Total interactions", len(analytics_data))
-            with ac2: st.metric("Questions chat", len(chats))
-            with ac3: st.metric("Matchings", len(matchings))
-            # Matching scores
+            scores = [m["score"] for m in matchings if m.get("score")]
+            avg_score = round(sum(scores) / len(scores)) if scores else 0
+            max_score = max(scores) if scores else 0
+            min_score = min(scores) if scores else 0
+            emails_collected = len([m for m in matchings if m.get("email")])
+
+            # KPI Cards
+            st.markdown(f"""<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem">
+                <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;padding:20px;text-align:center">
+                    <div style="font-size:2rem;font-weight:900;color:white">{len(analytics_data)}</div>
+                    <div style="font-size:.8rem;color:rgba(255,255,255,.8);margin-top:4px">Total interactions</div>
+                </div>
+                <div style="background:linear-gradient(135deg,#059669,#10b981);border-radius:16px;padding:20px;text-align:center">
+                    <div style="font-size:2rem;font-weight:900;color:white">{len(chats)}</div>
+                    <div style="font-size:.8rem;color:rgba(255,255,255,.8);margin-top:4px">Questions chat</div>
+                </div>
+                <div style="background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:16px;padding:20px;text-align:center">
+                    <div style="font-size:2rem;font-weight:900;color:white">{len(matchings)}</div>
+                    <div style="font-size:.8rem;color:rgba(255,255,255,.8);margin-top:4px">Matchings</div>
+                </div>
+                <div style="background:linear-gradient(135deg,#dc2626,#ef4444);border-radius:16px;padding:20px;text-align:center">
+                    <div style="font-size:2rem;font-weight:900;color:white">{emails_collected}</div>
+                    <div style="font-size:.8rem;color:rgba(255,255,255,.8);margin-top:4px">Emails collectés</div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+            # Score section
             if matchings:
-                scores = [m["score"] for m in matchings if m.get("score")]
-                if scores:
-                    avg_score = round(sum(scores) / len(scores))
-                    st.markdown(f"**Score moyen matching : {avg_score}/100**")
-                st.markdown("---")
-                st.markdown("**Derniers matchings**")
+                sc_color = "#16a34a" if avg_score >= 80 else ("#d97706" if avg_score >= 60 else "#dc2626")
+                st.markdown(f"""<div style="background:#f8fafc;border-radius:16px;padding:24px;margin-bottom:1.5rem;border:1px solid #e2e8f0">
+                    <div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px">Score Matching</div>
+                    <div style="display:flex;gap:24px;align-items:center">
+                        <div style="text-align:center;min-width:100px">
+                            <div style="font-size:2.5rem;font-weight:900;color:{sc_color}">{avg_score}</div>
+                            <div style="font-size:.75rem;color:#94a3b8">Moyenne /100</div>
+                        </div>
+                        <div style="flex:1;background:#e2e8f0;border-radius:100px;height:12px;overflow:hidden">
+                            <div style="width:{avg_score}%;height:100%;background:linear-gradient(90deg,{sc_color},{sc_color}88);border-radius:100px;transition:width .5s"></div>
+                        </div>
+                        <div style="display:flex;gap:16px">
+                            <div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#16a34a">{max_score}</div><div style="font-size:.7rem;color:#94a3b8">Max</div></div>
+                            <div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#d97706">{min_score}</div><div style="font-size:.7rem;color:#94a3b8">Min</div></div>
+                        </div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+                # Matchings list
+                st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Derniers matchings</div>', unsafe_allow_html=True)
                 for m in matchings[:10]:
-                    sc = m.get("score", "?")
-                    em = f' — 📧 {m.get("email")}' if m.get("email") else ""
-                    st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(99,102,241,.05);border-left:3px solid #6366f1"><strong>{m.get("poste","Sans titre")}</strong> — <span style="color:#6366f1;font-weight:700">{sc}/100</span>{em} <span style="color:#94a3b8;font-size:.8rem">({m.get("date","")})</span></div>', unsafe_allow_html=True)
+                    sc = m.get("score", 0) or 0
+                    sc_col = "#16a34a" if sc >= 80 else ("#d97706" if sc >= 60 else "#dc2626")
+                    sc_bg = "rgba(34,197,94,.08)" if sc >= 80 else ("rgba(217,119,6,.08)" if sc >= 60 else "rgba(220,38,38,.08)")
+                    em_html = f'<div style="margin-top:4px;font-size:.75rem;color:#6366f1">📧 {m.get("email")}</div>' if m.get("email") else ""
+                    date_str = m.get("date", "")
+                    st.markdown(f"""<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:{sc_bg};border-left:4px solid {sc_col};display:flex;align-items:center;gap:14px">
+                        <div style="min-width:52px;text-align:center;background:white;border-radius:10px;padding:6px 0;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+                            <div style="font-size:1.2rem;font-weight:900;color:{sc_col}">{sc}</div>
+                            <div style="font-size:.6rem;color:#94a3b8">/100</div>
+                        </div>
+                        <div style="flex:1">
+                            <div style="font-weight:700;color:#1e293b;font-size:.9rem">{m.get("poste","Sans titre")}</div>
+                            <div style="font-size:.75rem;color:#94a3b8;margin-top:2px">{date_str}</div>
+                            {em_html}
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
             # Chat questions
             if chats:
-                st.markdown("---")
-                st.markdown("**Dernieres questions**")
+                st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:24px 0 12px">Dernières questions</div>', unsafe_allow_html=True)
                 for c in chats[:15]:
-                    q = c.get("question", "")[:100]
-                    st.markdown(f'<div style="padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(34,197,94,.05);border-left:3px solid #16a34a"><strong>{q}</strong> <span style="color:#94a3b8;font-size:.8rem">({c.get("date","")})</span></div>', unsafe_allow_html=True)
+                    q = c.get("question", "")[:120]
+                    r = c.get("response", "")[:200]
+                    date_str = c.get("date", "")
+                    st.markdown(f"""<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:rgba(99,102,241,.04);border-left:4px solid #6366f1">
+                        <div style="font-weight:700;color:#1e293b;font-size:.9rem">💬 {q}</div>
+                        <div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.4">{r}...</div>
+                        <div style="font-size:.7rem;color:#94a3b8;margin-top:6px">{date_str}</div>
+                    </div>""", unsafe_allow_html=True)
         else:
-            st.info("Aucune interaction enregistrée. Les prochaines questions et matchings apparaîtront ici.")
+            st.markdown("""<div style="text-align:center;padding:3rem 1rem">
+                <div style="font-size:3rem;margin-bottom:1rem">📊</div>
+                <div style="font-size:1.1rem;font-weight:700;color:#334155;margin-bottom:.5rem">Aucune interaction enregistrée</div>
+                <div style="font-size:.9rem;color:#94a3b8">Les prochaines questions et matchings apparaîtront ici automatiquement.</div>
+            </div>""", unsafe_allow_html=True)
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
         nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"_record_ids":cfg.get("_record_ids",{})}

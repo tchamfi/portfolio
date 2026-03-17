@@ -18,16 +18,31 @@ def _get_api_key():
         return os.getenv("ANTHROPIC_API_KEY", "")
 
 
+def _get_llm_config():
+    """Get LLM config from Streamlit session or defaults."""
+    try:
+        import streamlit as st
+        cfg = st.session_state.get("config", {})
+        return {
+            "model": cfg.get("llm_model", "claude-sonnet-4-20250514"),
+            "temp_matching": float(cfg.get("llm_temp_matching", "0.2")),
+            "max_tokens_matching": int(cfg.get("llm_max_tokens_matching", "1500")),
+        }
+    except Exception:
+        return {"model": "claude-sonnet-4-20250514", "temp_matching": 0.2, "max_tokens_matching": 1500}
+
+
 def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
+    llm = _get_llm_config()
     response = client.messages.create(
-        model="claude-sonnet-4-20250514", max_tokens=1024, temperature=0.2,
+        model=llm["model"], max_tokens=1024, temperature=llm["temp_matching"],
         system="""Tu es un expert en analyse de fiches de poste IT.
-Extrais les informations cles au format JSON strict (pas de markdown, pas de backticks).
+Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
 {
     "titre": "titre du poste",
     "entreprise": "nom ou null",
-    "contexte": "resume en 2 phrases",
+    "contexte": "résumé en 2 phrases",
     "competences_requises": ["liste", "techniques"],
     "competences_methodologiques": ["Scrum", "SAFe"],
     "experience_demandee": "X ans en Y",
@@ -50,25 +65,26 @@ def query_rag_profile(queries):
 
 def compute_matching(job_analysis, profile_context):
     client = Anthropic(api_key=_get_api_key())
+    llm = _get_llm_config()
     response = client.messages.create(
-        model="claude-sonnet-4-20250514", max_tokens=1500, temperature=0.2,
+        model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
         system="""Tu es un expert en recrutement IT et en matching de profils senior.
-Tu evalues la compatibilite entre un candidat et une offre avec une approche COMMERCIALE et REALISTE.
+Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
 
 REGLES DE SCORING :
-- Tu evalues les COMPETENCES TRANSFERABLES, pas seulement les mots-cles exacts.
-  Exemple : experience Splunk/CloudWatch = transferable vers Datadog/Grafana. Experience AWS = transferable vers Azure/GCP.
-- Un candidat senior qui maitrise un outil equivalent a celui demande doit etre credite, pas penalise.
-- Les competences methodologiques (Scrum, pilotage, backlog, roadmap, KPIs) sont hautement transferables entre domaines.
-- Le score doit refleter la capacite REELLE du candidat a reussir dans le poste, pas un matching mot-a-mot.
-- Un profil qui coche 80% des criteres avec des competences transferables sur les 20% restants merite 80-85, pas 60-70.
+- Tu évalues les COMPÉTENCES TRANSFÉRABLES, pas seulement les mots-clés exacts.
+  Exemple : expérience Splunk/CloudWatch = transférable vers Datadog/Grafana. Expérience AWS = transférable vers Azure/GCP.
+- Un candidat senior qui maîtrise un outil équivalent à celui demandé doit être crédité, pas pénalisé.
+- Les compétences méthodologiques (Scrum, pilotage, backlog, roadmap, KPIs) sont hautement transférables entre domaines.
+- Le score doit refléter la capacité RÉELLE du candidat à réussir dans le poste, pas un matching mot-à-mot.
+- Un profil qui coche 80% des critères avec des compétences transférables sur les 20% restants mérite 80-85, pas 60-70.
 
 ECHELLE :
 - 90-100 : Match quasi parfait, experience directe sur tous les points
-- 80-89 : Tres bon match, competences transferables sur les points manquants
+- 80-89 : Très bon match, compétences transférables sur les points manquants
 - 70-79 : Bon match avec quelques gaps significatifs
 - 60-69 : Match partiel, gaps importants
-- <60 : Profil eloigne
+- <60 : Profil éloigné
 
 Reponds au format JSON strict :
 {
@@ -77,7 +93,7 @@ Reponds au format JSON strict :
     "points_attention": ["liste de 2-3 points d'attention honnetes mais constructifs"],
     "competences_manquantes": ["liste courte"],
     "arguments_cles": ["3 arguments convaincants pour un recruteur"],
-    "conseil_approche": "conseil strategique pour aborder le poste"
+    "conseil_approche": "conseil stratégique pour aborder le poste"
 }""",
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
     )
@@ -91,17 +107,18 @@ Reponds au format JSON strict :
 def draft_response(job_analysis, matching, response_type="email"):
     client = Anthropic(api_key=_get_api_key())
     if response_type == "email":
-        instruction = """Redige un email de candidature professionnel, concis (max 250 mots). Signe : Lionel TCHAMFONG.
-REGLES DE FORMAT STRICTES :
+        instruction = """Rédige un email de candidature professionnel, concis (max 250 mots). Signé : Lionel TCHAMFONG.
+RÈGLES DE FORMAT STRICTES :
 - Texte brut uniquement. AUCUN markdown (pas de **, pas de -, pas de #, pas de ```).
-- Pas de listes a puces. Utilise des phrases et paragraphes naturels.
-- L'email doit pouvoir etre copie-colle directement dans Gmail sans caracteres speciaux.
+- Pas de listes à puces. Utilise des phrases et paragraphes naturels.
+- L'email doit pouvoir être copié-collé directement dans Gmail sans caractères spéciaux.
 - Commence par Objet : puis le corps de l'email."""
     else:
-        instruction = """Redige un pitch oral de 2 minutes, confiant et concret.
-REGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes a puces, pas de caracteres speciaux."""
+        instruction = """Rédige un pitch oral de 2 minutes, confiant et concret.
+RÈGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes à puces, pas de caractères spéciaux."""
+    llm = _get_llm_config()
     response = client.messages.create(
-        model="claude-sonnet-4-20250514", max_tokens=1500, system=instruction,
+        model=llm["model"], max_tokens=llm["max_tokens_matching"], system=instruction,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"}],
     )
     return response.content[0].text

@@ -27,6 +27,8 @@ FALLBACK_CONFIG = {
     "exp": [], "case_studies": [],
     "show_profil": True, "show_metrics": True, "show_case_studies": True, "show_parcours": True, "show_recos": True,
     "show_chat": True, "show_matching": True, "show_rdv": True,
+    "llm_model": "claude-sonnet-4-20250514", "llm_temp_chat": "1.0", "llm_temp_matching": "0.2",
+    "llm_top_k": "12", "llm_max_tokens_chat": "1024", "llm_max_tokens_matching": "1500",
     "hero_name": "Lionel TCHAMFONG",
     "hero_title": "Senior Product Owner — Data Platforms, APIs & AI",
     "hero_tagline_fr": "Je concois et pilote des plateformes data, APIs et produits IA dans des environnements internationaux complexes.",

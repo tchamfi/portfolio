@@ -55,7 +55,7 @@ if st.session_state.admin_view:
     if "admin_v" not in st.session_state: st.session_state.admin_v=0
     av=st.session_state.admin_v  # version counter for widget keys
 
-    at1,at2,at3,at4,at5,at6,at7,at8=st.tabs(["📋 General","👁 Visibilite","📝 Profil","📊 Metriques","💼 Experiences","🎯 Case Studies","⭐ Recos","📈 Analytics"])
+    at1,at2,at3,at4,at5,at6,at7,at8,at9=st.tabs(["📋 Général","👁 Visibilité","📝 Profil","📊 Métriques","💼 Expériences","🎯 Case Studies","⭐ Recos","📈 Analytics","⚙️ LLM"])
 
     with at1:
         st.markdown("**Hero**")
@@ -272,8 +272,29 @@ if st.session_state.admin_view:
                 <div style="font-size:.9rem;color:#94a3b8">Les prochaines questions et matchings apparaîtront ici automatiquement.</div>
             </div>""", unsafe_allow_html=True)
 
+    with at9:
+        st.markdown("**Configuration du modèle IA**")
+        st.caption("Ces paramètres s'appliquent immédiatement après sauvegarde — pas besoin de redéployer.")
+        model_opts = ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"]
+        cur_model = cfg.get("llm_model", "claude-sonnet-4-20250514")
+        new_llm_model = st.selectbox("Modèle", model_opts, index=model_opts.index(cur_model) if cur_model in model_opts else 0, key="llm_model")
+        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher.")
+        llm1, llm2 = st.columns(2)
+        with llm1:
+            st.markdown("**Chat RAG**")
+            new_llm_temp_chat = st.slider("Température chat", 0.0, 2.0, float(cfg.get("llm_temp_chat", "1.0")), 0.1, key="llm_tc", help="0 = déterministe, 1 = naturel, 2 = créatif")
+            new_llm_max_chat = st.number_input("Max tokens chat", 256, 4096, int(cfg.get("llm_max_tokens_chat", "1024")), 128, key="llm_mc", help="Longueur max de la réponse (~750 mots à 1024)")
+            new_llm_top_k = st.slider("TOP_K (chunks RAG)", 4, 20, int(cfg.get("llm_top_k", "12")), 1, key="llm_tk", help="Nombre de chunks envoyés à Claude. Plus = plus de contexte, mais plus cher")
+        with llm2:
+            st.markdown("**Matching / Agent**")
+            new_llm_temp_match = st.slider("Température matching", 0.0, 2.0, float(cfg.get("llm_temp_matching", "0.2")), 0.1, key="llm_tm", help="0.2 = stable avec nuance. 0 = identique à chaque fois")
+            new_llm_max_match = st.number_input("Max tokens matching", 512, 4096, int(cfg.get("llm_max_tokens_matching", "1500")), 128, key="llm_mm", help="Longueur max de l'email/pitch généré")
+        st.markdown("---")
+        st.markdown("**Résumé de la configuration active**")
+        st.markdown(f'<div style="background:#f8fafc;border-radius:12px;padding:16px;border:1px solid #e2e8f0;font-size:.85rem;line-height:1.8"><strong>Modèle :</strong> {new_llm_model}<br><strong>Chat :</strong> temp={new_llm_temp_chat}, max_tokens={new_llm_max_chat}, TOP_K={new_llm_top_k}<br><strong>Matching :</strong> temp={new_llm_temp_match}, max_tokens={new_llm_max_match}</div>', unsafe_allow_html=True)
+
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
-        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"_record_ids":cfg.get("_record_ids",{})}
+        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"_record_ids":cfg.get("_record_ids",{})}
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
         st.session_state.admin_exp=new_exp; st.session_state.admin_cs=new_cs
         st.session_state.messages=[{"role":"assistant","content":WELCOME_FR}]

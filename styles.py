@@ -103,6 +103,9 @@ CSS = """
     .reco-card::before{content:open-quote;font-size:3rem;color:rgba(99,102,241,.15);position:absolute;top:8px;left:16px;font-family:Georgia,serif;line-height:1;}
     .reco-text{color:#475569!important;font-size:.9rem;line-height:1.6;padding-left:1.5rem;font-style:italic;}
     .reco-author{margin-top:.8rem;padding-left:1.5rem;}
+    .reco-author-row{display:flex;align-items:center;gap:12px;margin-top:1rem;padding-top:.8rem;border-top:1px solid rgba(0,0,0,.05);padding-left:1.5rem;}
+    .reco-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ede9fe,#e0e7ff);display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#6366f1!important;flex-shrink:0;}
+    .reco-author-info{flex:1;}
     .reco-name{font-weight:700;color:#1e293b!important;font-size:.85rem;}
     .reco-name-link{font-weight:700;color:#6366f1!important;font-size:.85rem;text-decoration:none;border-bottom:1px solid rgba(99,102,241,.3);}
     .reco-name-link:hover{color:#4f46e5!important;border-bottom-color:#4f46e5;}
@@ -127,16 +130,18 @@ CSS = """
     .stTabs [data-baseweb="tab-highlight"],.stTabs [data-baseweb="tab-border"]{display:none!important;}
     .stTabs [data-baseweb="tab-panel"]{padding-top:2rem;}
 
-    /* CHAT */
+    /* CHAT — Avatar bubbles */
     .chat-box{background:white;border:1px solid rgba(0,0,0,.06);border-radius:20px;padding:1.5rem;margin-bottom:1rem;max-height:480px;overflow-y:auto;position:relative;z-index:1;}
     .chat-box::-webkit-scrollbar{width:8px;} .chat-box::-webkit-scrollbar-track{background:#f1f5f9;border-radius:4px;} .chat-box::-webkit-scrollbar-thumb{background:#6366f1;border-radius:4px;}
-    .chat-msg{padding:.7rem 1rem;margin-bottom:.5rem;border-radius:12px;font-size:.9rem;line-height:1.65;color:#334155!important;}
-    .chat-msg *{color:#334155!important;}
-    .chat-msg.user{background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.12);}
-    .chat-msg.assistant{background:#f8fafc;border:1px solid rgba(0,0,0,.04);}
-    .chat-msg .msg-who{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem;}
-    .chat-msg.user .msg-who{color:#6366f1!important;}
-    .chat-msg.assistant .msg-who{color:#94a3b8!important;}
+    .chat-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;}
+    .chat-row.user{flex-direction:row-reverse;}
+    .chat-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;}
+    .av-bot{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;}
+    .av-user{background:#e2e8f0;color:#64748b;}
+    .chat-bubble{padding:.7rem 1rem;border-radius:16px;font-size:.9rem;line-height:1.65;color:#334155!important;max-width:80%;}
+    .chat-bubble *{color:#334155!important;}
+    .bubble-bot{background:#f8fafc;border:1px solid rgba(0,0,0,.04);border-top-left-radius:4px;}
+    .bubble-user{background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.12);border-top-right-radius:4px;}
 
     /* INPUTS — force dark text, visible placeholders, clickable, focus visible */
     .stChatInput{position:relative;z-index:10;}
@@ -176,6 +181,9 @@ CSS = """
     .score-sub{font-size:.85rem;color:#94a3b8!important;}
     .pt-fort{background:rgba(34,197,94,.05);border-left:3px solid #22c55e;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
     .pt-att{background:rgba(234,179,8,.05);border-left:3px solid #eab308;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
+    .pt-gap-red{background:rgba(220,38,38,.05);border-left:3px solid #dc2626;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
+    .pt-gap-orange{background:rgba(217,119,6,.05);border-left:3px solid #d97706;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
+    .gap-section-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 .5rem;}
     .info-box{background:rgba(99,102,241,.04);border:1px solid rgba(99,102,241,.12);border-radius:16px;padding:1.2rem 1.5rem;margin-bottom:1.5rem;}
     .info-box .info-title{color:#6366f1!important;font-weight:700;font-size:.9rem;}
     .info-box .info-desc{color:#64748b!important;font-size:.85rem;}
@@ -226,7 +234,8 @@ CSS = """
         .stTabs [data-baseweb="tab-list"]{padding:6px!important;gap:4px!important;border-radius:12px!important;overflow-x:auto!important;flex-wrap:nowrap!important;justify-content:flex-start!important;}
         .stTabs [data-baseweb="tab"]{font-size:.7rem!important;padding:10px 14px!important;white-space:nowrap!important;min-width:auto!important;}
         .chat-box{max-height:350px!important;}
-        .chat-msg{padding:10px 12px!important;font-size:.85rem!important;}
+        .chat-bubble{font-size:.85rem!important;padding:8px 10px!important;}
+        .chat-avatar{width:26px!important;height:26px!important;font-size:.6rem!important;}
         .info-box{padding:16px!important;}
         .info-title{font-size:1rem!important;}
         .info-desc{font-size:.78rem!important;}

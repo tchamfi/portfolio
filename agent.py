@@ -71,7 +71,7 @@ def compute_matching(job_analysis, profile_context):
         system="""Tu es un expert en recrutement IT et en matching de profils senior.
 Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
 
-REGLES DE SCORING :
+RÈGLES DE SCORING :
 - Tu évalues les COMPÉTENCES TRANSFÉRABLES, pas seulement les mots-clés exacts.
   Exemple : expérience Splunk/CloudWatch = transférable vers Datadog/Grafana. Expérience AWS = transférable vers Azure/GCP.
 - Un candidat senior qui maîtrise un outil équivalent à celui demandé doit être crédité, pas pénalisé.
@@ -79,19 +79,25 @@ REGLES DE SCORING :
 - Le score doit refléter la capacité RÉELLE du candidat à réussir dans le poste, pas un matching mot-à-mot.
 - Un profil qui coche 80% des critères avec des compétences transférables sur les 20% restants mérite 80-85, pas 60-70.
 
-ECHELLE :
-- 90-100 : Match quasi parfait, experience directe sur tous les points
+ÉCHELLE :
+- 90-100 : Match quasi parfait, expérience directe sur tous les points
 - 80-89 : Très bon match, compétences transférables sur les points manquants
 - 70-79 : Bon match avec quelques gaps significatifs
 - 60-69 : Match partiel, gaps importants
 - <60 : Profil éloigné
 
-Reponds au format JSON strict :
+ANALYSE DES GAPS — TRÈS IMPORTANT :
+- gaps_imperatifs : compétences ABSENTES du profil qui sont marquées comme "requis", "impératif", "obligatoire", "indispensable", "X ans minimum", "maîtrise exigée" dans l'offre. Ce sont des bloquants.
+- gaps_apprecies : compétences ABSENTES du profil qui sont marquées comme "apprécié", "un plus", "idéalement", "souhaité", "serait un atout", "connaissance souhaitée" dans l'offre. Ce sont des nice-to-have.
+- Si une compétence n'est pas explicitement marquée comme optionnelle dans l'offre, considère-la comme impérative par défaut.
+
+Réponds au format JSON strict :
 {
     "score_global": 85,
     "points_forts": ["liste de 4-5 points forts valorisants"],
-    "points_attention": ["liste de 2-3 points d'attention honnetes mais constructifs"],
-    "competences_manquantes": ["liste courte"],
+    "points_attention": ["liste de 2-3 points d'attention honnêtes mais constructifs"],
+    "gaps_imperatifs": ["compétences absentes marquées comme requises/obligatoires dans l'offre"],
+    "gaps_apprecies": ["compétences absentes marquées comme appréciées/optionnelles dans l'offre"],
     "arguments_cles": ["3 arguments convaincants pour un recruteur"],
     "conseil_approche": "conseil stratégique pour aborder le poste"
 }""",

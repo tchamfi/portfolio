@@ -399,10 +399,13 @@ if "chat" in tab_dict:
         st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
         chat_html='<div class="chat-box" id="chat-box">'
         for msg in st.session_state.messages:
-            cls=msg["role"]; who="Lionel" if cls=="assistant" else ("You" if lang=="en" else "Vous")
+            cls=msg["role"]
             c=msg["content"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
             c=re.sub(r'\*\*(.+?)\*\*',r'<strong>\1</strong>',c); c=re.sub(r'^#+\s*','',c,flags=re.MULTILINE); c=c.replace("\n","<br>")
-            chat_html+=f'<div class="chat-msg {cls}"><div class="msg-who">{who}</div>{c}</div>'
+            if cls == "assistant":
+                chat_html+=f'<div class="chat-row assistant"><div class="chat-avatar av-bot">L</div><div class="chat-bubble bubble-bot">{c}</div></div>'
+            else:
+                chat_html+=f'<div class="chat-row user"><div class="chat-bubble bubble-user">{c}</div><div class="chat-avatar av-user">V</div></div>'
         chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
         st.markdown(chat_html,unsafe_allow_html=True)
         typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
@@ -439,17 +442,39 @@ if "matching" in tab_dict:
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")
                 if matching and not matching.get("error"):
-                    score=matching.get("score_global",0); sc="low" if score<60 else ("mid" if score<80 else "high")
-                    st.markdown(f'<div class="score-box {sc}"><div class="score-num">{score}/100</div><div class="score-sub">Match</div></div>',unsafe_allow_html=True)
+                    score=matching.get("score_global",0)
+                    sc="low" if score<60 else ("mid" if score<80 else "high")
+                    sc_col="#dc2626" if score<60 else ("#ca8a04" if score<80 else "#16a34a")
+                    # Circular score
+                    st.markdown(f'<div style="text-align:center;padding:1.5rem 0"><div style="display:inline-flex;align-items:center;justify-content:center;width:120px;height:120px;border-radius:50%;background:conic-gradient({sc_col} 0% {score}%, #e2e8f0 {score}% 100%);position:relative"><div style="width:96px;height:96px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;flex-direction:column"><div style="font-size:2.2rem;font-weight:900;color:{sc_col}">{score}</div><div style="font-size:.7rem;color:#94a3b8">/100</div></div></div></div>', unsafe_allow_html=True)
+                    # Points forts — always visible
+                    if matching.get("points_forts"):
+                        st.markdown('<div class="gap-section-title" style="color:#16a34a">Points forts</div>', unsafe_allow_html=True)
+                        for p in matching.get("points_forts",[]):
+                            st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
+                    # Gaps — visible to public only if score < 60, always visible to admin
+                    show_gaps = is_private or score < 60
+                    if show_gaps:
+                        gaps_imp = matching.get("gaps_imperatifs", [])
+                        gaps_app = matching.get("gaps_apprecies", [])
+                        if gaps_imp:
+                            st.markdown('<div class="gap-section-title" style="color:#dc2626">Compétences manquantes (requises)</div>', unsafe_allow_html=True)
+                            for g in gaps_imp:
+                                st.markdown(f'<div class="pt-gap-red">{g}</div>', unsafe_allow_html=True)
+                        if gaps_app:
+                            st.markdown('<div class="gap-section-title" style="color:#d97706">Compétences manquantes (appréciées)</div>', unsafe_allow_html=True)
+                            for g in gaps_app:
+                                st.markdown(f'<div class="pt-gap-orange">{g}</div>', unsafe_allow_html=True)
+                        if score < 60 and not is_private:
+                            msg_honesty = "This role requires skills I haven't developed yet, but here's what I bring to the table." if lang=="en" else "Ce poste nécessite des compétences que je n'ai pas encore développées, mais voici ce que j'apporte."
+                            st.markdown(f'<div style="background:rgba(99,102,241,.04);border-radius:12px;padding:12px 16px;margin-top:12px;font-size:.85rem;color:#64748b;font-style:italic">{msg_honesty}</div>', unsafe_allow_html=True)
+                    # Admin extras
                     if is_private:
-                        m1,m2=st.columns(2)
-                        with m1:
-                            for p in matching.get("points_forts",[]): st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
-                        with m2:
-                            for p in matching.get("points_attention",[]): st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
+                        if matching.get("points_attention"):
+                            st.markdown('<div class="gap-section-title" style="color:#d97706">Points d\'attention</div>', unsafe_allow_html=True)
+                            for p in matching.get("points_attention",[]):
+                                st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
                         st.markdown("---"); st.code(res.get("response",""),language=None)
-                    else:
-                        for p in matching.get("points_forts",[]): st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
             elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---
@@ -467,10 +492,12 @@ if "recos" in tab_dict:
         reco_html=""
         for r in approved:
             li=r.get("linkedin","")
-            name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{r["name"]}</a>' if li else f'<span class="reco-name">{r["name"]}</span>'
+            name=r.get("name","")
+            initials = "".join([w[0].upper() for w in name.split()[:2]]) if name else "?"
+            name_html=f'<a href="{li}" target="_blank" class="reco-name-link">{name}</a>' if li else f'<span class="reco-name">{name}</span>'
             verified='<span class="reco-verified">&#10003; Profil vérifié</span>' if li else ''
             collab=f'<span class="reco-collab">{r.get("collab_period","")}</span>' if r.get("collab_period") else ""
-            reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div>'
+            reco_html+=f'<div class="reco-card"><div class="reco-text">{r["text"]}</div><div class="reco-author-row"><div class="reco-avatar">{initials}</div><div class="reco-author-info">{name_html}{verified}<span class="reco-relation">{r.get("relation","")}</span><br><span class="reco-info">{r.get("title","")} — {r.get("company","")}</span>{collab}</div></div></div>'
         if reco_html:
             st.markdown(reco_html,unsafe_allow_html=True)
         else:

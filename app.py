@@ -325,9 +325,11 @@ if cfg.get("show_tjm"): badges_extra+=f'<span class="h-badge">TJM {cfg.get("tjm"
 tagline=cfg.get("hero_tagline_en","") if lang=="en" else cfg.get("hero_tagline_fr","")
 hero_name=cfg.get("hero_name","Lionel TCHAMFONG")
 hero_title=cfg.get("hero_title","Senior Product Owner")
+hero_initials = "".join([w[0].upper() for w in hero_name.split()[:2]]) if hero_name else "LT"
 badges_list=[b.strip() for b in cfg.get("hero_badges","CSPO,CSM,Cloud,Data,GenAI").split(",") if b.strip()]
 badges_html="".join(f'<span class="h-badge">{b}</span>' for b in badges_list)
-st.markdown(f'<div class="hero-section"><div class="hero-name">{hero_name}</div><div class="hero-title">{hero_title}</div><div class="hero-tagline">{tagline}</div><div class="hero-badges"><span class="h-badge green">{"Available" if lang=="en" else "Disponibilit&eacute;"} : {cfg.get("disponibilite","")}</span>{badges_html}{badges_extra}</div></div>',unsafe_allow_html=True)
+avail_label = "Available" if lang=="en" else "Disponible"
+st.markdown(f'<div class="hero-section"><div class="hero-glow"></div><div class="hero-inner"><div class="hero-avatar">{hero_initials}</div><div class="hero-text"><div class="hero-name">{hero_name}</div><div class="hero-title">{hero_title}</div></div></div><div class="hero-tagline">{tagline}</div><div class="hero-badges"><span class="h-badge green">{avail_label} : {cfg.get("disponibilite","")}</span>{badges_html}{badges_extra}</div></div>',unsafe_allow_html=True)
 
 # CONTACT
 phone_html=f'<a href="tel:{cfg.get("phone","")}">{cfg.get("phone","")}</a>' if cfg.get("show_phone") else ""

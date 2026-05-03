@@ -35,7 +35,7 @@ def _get_llm_config():
 def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    response = client.messages.create(
+    response, metrics = _timed_call(client,
         model=llm["model"], max_tokens=1024, temperature=llm["temp_matching"],
         system="""Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
@@ -54,9 +54,9 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
     )
     text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
     try:
-        return json.loads(text)
+        return json.loads(text), metrics
     except json.JSONDecodeError:
-        return {"raw_analysis": text, "error": "JSON parse failed"}
+        return {"raw_analysis": text, "error": "JSON parse failed"}, metrics
 
 
 def query_rag_profile(queries):
@@ -66,7 +66,7 @@ def query_rag_profile(queries):
 def compute_matching(job_analysis, profile_context):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    response = client.messages.create(
+    response, metrics = _timed_call(client,
         model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
         system="""Tu es un expert en recrutement IT et en matching de profils senior.
 Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
@@ -105,9 +105,9 @@ Réponds au format JSON strict :
     )
     text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
     try:
-        return json.loads(text)
+        return json.loads(text), metrics
     except json.JSONDecodeError:
-        return {"raw_matching": text, "error": "JSON parse failed"}
+        return {"raw_matching": text, "error": "JSON parse failed"}, metrics
 
 
 def draft_response(job_analysis, matching, response_type="email"):
@@ -123,18 +123,45 @@ RÈGLES DE FORMAT STRICTES :
         instruction = """Rédige un pitch oral de 2 minutes, confiant et concret.
 RÈGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes à puces, pas de caractères spéciaux."""
     llm = _get_llm_config()
-    response = client.messages.create(
+    response, metrics = _timed_call(client,
         model=llm["model"], max_tokens=llm["max_tokens_matching"], system=instruction,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"}],
     )
-    return response.content[0].text
+    return response.content[0].text, metrics
+
+
+def _timed_call(client, **kwargs):
+    """Wrapper to capture tokens and latency on any Claude call."""
+    import time
+    COST_IN = 3.0 / 1_000_000
+    COST_OUT = 15.0 / 1_000_000
+    t0 = time.time()
+    response = client.messages.create(**kwargs)
+    return response, {
+        "tokens_input": response.usage.input_tokens,
+        "tokens_output": response.usage.output_tokens,
+        "latence_ms": int((time.time() - t0) * 1000),
+        "cout_usd": round(response.usage.input_tokens * COST_IN + response.usage.output_tokens * COST_OUT, 6)
+    }
+
+
+def _merge_metrics(metrics_list):
+    """Sum all metrics across multiple LLM calls."""
+    return {
+        "tokens_input": sum(m.get("tokens_input", 0) for m in metrics_list),
+        "tokens_output": sum(m.get("tokens_output", 0) for m in metrics_list),
+        "latence_ms": sum(m.get("latence_ms", 0) for m in metrics_list),
+        "cout_usd": round(sum(m.get("cout_usd", 0) for m in metrics_list), 6)
+    }
 
 
 def run_agent(job_text, response_type="email"):
-    results = {"steps": [], "job_analysis": None, "profile_context": None, "matching": None, "response": None}
+    results = {"steps": [], "job_analysis": None, "profile_context": None, "matching": None, "response": None, "metrics": {}}
+    all_metrics = []
 
     results["steps"].append("Analyse de la fiche...")
-    job_analysis = analyze_job_posting(job_text)
+    job_analysis, m1 = analyze_job_posting(job_text)
+    all_metrics.append(m1)
     results["job_analysis"] = job_analysis
 
     queries = []
@@ -150,8 +177,12 @@ def run_agent(job_text, response_type="email"):
     profile_context = query_rag_profile(queries)
     results["profile_context"] = profile_context
 
-    matching = compute_matching(job_analysis, profile_context)
+    matching, m3 = compute_matching(job_analysis, profile_context)
+    all_metrics.append(m3)
     results["matching"] = matching
 
-    results["response"] = draft_response(job_analysis, matching, response_type)
+    response_text, m4 = draft_response(job_analysis, matching, response_type)
+    all_metrics.append(m4)
+    results["response"] = response_text
+    results["metrics"] = _merge_metrics(all_metrics)
     return results

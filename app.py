@@ -229,22 +229,16 @@ if st.session_state.admin_view:
             # Score section
             if matchings:
                 sc_color = "#16a34a" if avg_score >= 80 else ("#d97706" if avg_score >= 60 else "#dc2626")
-                st.markdown(f"""<div style="background:#f8fafc;border-radius:16px;padding:24px;margin-bottom:1.5rem;border:1px solid #e2e8f0">
-                    <div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px">Score Matching</div>
-                    <div style="display:flex;gap:24px;align-items:center">
-                        <div style="text-align:center;min-width:100px">
-                            <div style="font-size:2.5rem;font-weight:900;color:{sc_color}">{avg_score}</div>
-                            <div style="font-size:.75rem;color:#94a3b8">Moyenne /100</div>
-                        </div>
-                        <div style="flex:1;background:#e2e8f0;border-radius:100px;height:12px;overflow:hidden">
-                            <div style="width:{avg_score}%;height:100%;background:linear-gradient(90deg,{sc_color},{sc_color}88);border-radius:100px;transition:width .5s"></div>
-                        </div>
-                        <div style="display:flex;gap:16px">
-                            <div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#16a34a">{max_score}</div><div style="font-size:.7rem;color:#94a3b8">Max</div></div>
-                            <div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#d97706">{min_score}</div><div style="font-size:.7rem;color:#94a3b8">Min</div></div>
-                        </div>
-                    </div>
-                </div>""", unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#f8fafc;border-radius:16px;padding:24px;margin-bottom:1.5rem;border:1px solid #e2e8f0"><div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px">Score Matching</div><div style="display:flex;gap:24px;align-items:center"><div style="text-align:center;min-width:100px"><div style="font-size:2.5rem;font-weight:900;color:{sc_color}">{avg_score}</div><div style="font-size:.75rem;color:#94a3b8">Moyenne /100</div></div><div style="flex:1;background:#e2e8f0;border-radius:100px;height:12px;overflow:hidden"><div style="width:{avg_score}%;height:100%;background:{sc_color};border-radius:100px"></div></div><div style="display:flex;gap:16px"><div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#16a34a">{max_score}</div><div style="font-size:.7rem;color:#94a3b8">Max</div></div><div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#d97706">{min_score}</div><div style="font-size:.7rem;color:#94a3b8">Min</div></div></div></div></div>', unsafe_allow_html=True)
+
+            # LLM Monitoring
+            all_tok_in = sum(a.get("tokens_input",0) or 0 for a in analytics_data)
+            all_tok_out = sum(a.get("tokens_output",0) or 0 for a in analytics_data)
+            all_cout = sum(a.get("cout_usd",0) or 0 for a in analytics_data)
+            latences = [a.get("latence_ms",0) for a in analytics_data if a.get("latence_ms")]
+            avg_lat = round(sum(latences)/len(latences)) if latences else 0
+            if all_tok_in > 0:
+                st.markdown(f'<div style="background:#f8fafc;border-radius:16px;padding:20px;margin-bottom:1.5rem;border:1px solid #e2e8f0"><div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Monitoring LLM</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0"><div style="font-size:1.3rem;font-weight:900;color:#1e293b">{all_tok_in:,}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">tokens input</div></div><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0"><div style="font-size:1.3rem;font-weight:900;color:#1e293b">{all_tok_out:,}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">tokens output</div></div><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0"><div style="font-size:1.3rem;font-weight:900;color:#1e293b">{avg_lat:,} ms</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">latence moyenne</div></div><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #6366f1"><div style="font-size:1.3rem;font-weight:900;color:#6366f1">${all_cout:.4f}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">coût total</div></div></div></div>', unsafe_allow_html=True)
 
                 # Matchings list
                 st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Derniers matchings</div>', unsafe_allow_html=True)
@@ -413,9 +407,9 @@ if "chat" in tab_dict:
         typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
         if typed:
             st.session_state.messages.append({"role":"user","content":typed})
-            try: resp=ask(typed+get_config_context())
-            except Exception as e: resp=f"Error: {e}"
-            try: log_chat(typed, resp, lang=lang, chunks_used=12)
+            try: resp, metrics = ask(typed+get_config_context())
+            except Exception as e: resp, metrics = f"Error: {e}", {}
+            try: log_chat(typed, resp, lang=lang, chunks_used=12, metrics=metrics)
             except: pass
             st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
 
@@ -439,7 +433,7 @@ if "matching" in tab_dict:
                 with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
                 try:
                     _res=st.session_state.agent_results; _m=_res.get("matching",{})
-                    log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email)
+                    log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email, metrics=_res.get("metrics",{}))
                 except: pass
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")

@@ -119,26 +119,55 @@ def search_chunks(queries, top_k=10):
     return "\n\n---\n\n".join(f"[{r['source']}]\n{r['text']}" for r in all_results[:15])
 
 
+def _get_llm_config():
+    """Get LLM config from Streamlit session or defaults."""
+    try:
+        import streamlit as st
+        cfg = st.session_state.get("config", {})
+        return {
+            "model": cfg.get("llm_model", "claude-sonnet-4-20250514"),
+            "temp_chat": float(cfg.get("llm_temp_chat", "1.0")),
+            "top_k": int(cfg.get("llm_top_k", "12")),
+            "max_tokens_chat": int(cfg.get("llm_max_tokens_chat", "1024")),
+        }
+    except Exception:
+        return {"model": "claude-sonnet-4-20250514", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
+
+
+CLAUDE_INPUT_COST = 3.0 / 1_000_000   # $3 per million input tokens
+CLAUDE_OUTPUT_COST = 15.0 / 1_000_000  # $15 per million output tokens
+
+
 def generate_response(question, context):
+    import time
     client = Anthropic(api_key=_get_api_key())
+    llm = _get_llm_config()
     system_prompt = """Tu ES Lionel TCHAMFONG. Tu réponds en première personne (je, mon, mes) aux questions des recruteurs et clients.
-Regles STRICTES :
-- Réponds naturellement comme si tu étais en entretien. Ne JAMAIS dire "d'apres mes sources", "le contexte indique", "mes sources", "les informations fournies" ou toute formulation qui révèle que tu es une IA lisant un document.
+Règles STRICTES :
+- Réponds naturellement comme si tu étais en entretien. Ne JAMAIS dire "d'après mes sources", "le contexte indique", "mes sources", "les informations fournies" ou toute formulation qui révèle que tu es une IA lisant un document.
 - Base tes réponses UNIQUEMENT sur les informations du contexte ci-dessous. Ne JAMAIS inventer.
 - Cite les faits exacts (noms, dates, chiffres, services AWS) tels qu'ils apparaissent. Sois précis et concret.
-- Quand on te demande des certifications, formations ou etudes : liste TOUTES celles présentes dans le contexte, sans en omettre.
-- ATTENTION : Tu es DIPLÔMÉ de l'ENSEIRB (Institut Polytechnique de Bordeaux). Tu ENSEIGNES à l'IUT d'Evry / EFREI. Ce sont deux choses différentes.
-- Si l'information n'est pas dans le contexte, dis simplement : "Je vous invite a me contacter directement pour en discuter."
+- Quand on te demande des certifications, formations ou études : liste TOUTES celles présentes dans le contexte, sans en omettre.
+- ATTENTION : Tu es DIPLÔMÉ de l'ENSEIRB (Institut Polytechnique de Bordeaux). Tu ENSEIGNES à l'IUT d'Évry / EFREI. Ce sont deux choses différentes.
+- Si l'information n'est pas dans le contexte, dis simplement : "Je vous invite à me contacter directement pour en discuter."
 - Sois professionnel, précis, engageant et concret. Donne des exemples réels de tes missions."""
 
+    t0 = time.time()
     response = client.messages.create(
-        model="claude-sonnet-4-20250514", max_tokens=1024,
+        model=llm["model"], max_tokens=llm["max_tokens_chat"],
+        temperature=llm["temp_chat"],
         system=system_prompt,
         messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
     )
-    return response.content[0].text
+    latence_ms = int((time.time() - t0) * 1000)
+    tokens_in = response.usage.input_tokens
+    tokens_out = response.usage.output_tokens
+    cout = round(tokens_in * CLAUDE_INPUT_COST + tokens_out * CLAUDE_OUTPUT_COST, 6)
+    return response.content[0].text, {"tokens_input": tokens_in, "tokens_output": tokens_out, "latence_ms": latence_ms, "cout_usd": cout}
 
 
 def ask(question):
-    context = retrieve_context(question)
-    return generate_response(question, context)
+    llm = _get_llm_config()
+    context = retrieve_context(question, top_k=llm["top_k"])
+    text, metrics = generate_response(question, context)
+    return text, metrics

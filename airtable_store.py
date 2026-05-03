@@ -44,7 +44,7 @@ def load_config():
             try: config[jk] = json.loads(config[jk])
             except: config[jk] = []
 
-    for bk in ["show_tjm", "show_phone", "show_profil", "show_metrics", "show_case_studies", "show_parcours", "show_recos"]:
+    for bk in ["show_tjm", "show_phone", "show_profil", "show_metrics", "show_case_studies", "show_parcours", "show_recos", "show_chat", "show_matching", "show_rdv"]:
         if bk in config: config[bk] = str(config[bk]).lower() == "true"
 
     config["_record_ids"] = record_ids
@@ -57,7 +57,7 @@ def save_config(config):
               "profil_p1_en","profil_p2_en","profil_p3_en","profil_p4_en",
               "hero_name","hero_title","hero_tagline_fr","hero_tagline_en","hero_badges"]:
         if k in config: kv[k] = str(config[k])
-    for bk in ["show_tjm","show_phone","show_profil","show_metrics","show_case_studies","show_parcours","show_recos"]:
+    for bk in ["show_tjm","show_phone","show_profil","show_metrics","show_case_studies","show_parcours","show_recos","show_chat","show_matching","show_rdv"]:
         if bk in config: kv[bk] = "true" if config[bk] else "false"
     for i in range(1, 5):
         mk = f"metric{i}"
@@ -103,40 +103,49 @@ def update_all_recos(recos):
 # ================================================================
 ANALYTICS_TABLE = "tblOMs2pa8UFK9UKY"
 
-def log_chat(question, response, lang="fr", chunks_used=0):
+def log_chat(question, response, lang="fr", chunks_used=0, metrics=None):
     """Log a chat interaction to Analytics table."""
     from datetime import datetime
     url = f"{API_URL}/{BASE_ID}/{ANALYTICS_TABLE}"
+    m = metrics or {}
     try:
         requests.post(url, headers=headers(), json={"records": [{"fields": {
             "type": "chat",
             "question": question[:2000],
             "response": response[:5000],
-            "poste": "",
             "langue": lang,
             "chunks": chunks_used,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "email": email
+            "tokens_input": m.get("tokens_input", 0),
+            "tokens_output": m.get("tokens_output", 0),
+            "latence_ms": m.get("latence_ms", 0),
+            "cout_usd": m.get("cout_usd", 0),
         }}]}, timeout=10)
     except Exception as e:
         print(f"[analytics] log_chat error: {e}")
 
-def log_matching(question, response, score=0, job_title="", lang="fr", chunks_used=0, email=""):
+def log_matching(question, response, score=0, job_title="", lang="fr", chunks_used=0, email="", metrics=None):
     """Log a matching interaction to Analytics table."""
     from datetime import datetime
     url = f"{API_URL}/{BASE_ID}/{ANALYTICS_TABLE}"
+    m = metrics or {}
+    fields = {
+        "type": "matching",
+        "question": question[:2000],
+        "response": response[:5000],
+        "score": score,
+        "poste": job_title[:200],
+        "langue": lang,
+        "chunks": chunks_used,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "tokens_input": m.get("tokens_input", 0),
+        "tokens_output": m.get("tokens_output", 0),
+        "latence_ms": m.get("latence_ms", 0),
+        "cout_usd": m.get("cout_usd", 0),
+    }
+    if email: fields["email"] = email
     try:
-        requests.post(url, headers=headers(), json={"records": [{"fields": {
-            "type": "matching",
-            "question": question[:2000],
-            "response": response[:5000],
-            "score": score,
-            "poste": job_title[:200],
-            "langue": lang,
-            "chunks": chunks_used,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "email": email
-        }}]}, timeout=10)
+        requests.post(url, headers=headers(), json={"records": [{"fields": fields}]}, timeout=10)
     except Exception as e:
         print(f"[analytics] log_matching error: {e}")
 
@@ -148,4 +157,4 @@ def load_analytics():
         resp.raise_for_status(); data = resp.json()
     except Exception as e:
         print(f"[airtable] load_analytics error: {e}"); return []
-    return [{"type": rec.get("fields",{}).get("type",""), "question": rec.get("fields",{}).get("question",""), "response": rec.get("fields",{}).get("response",""), "score": rec.get("fields",{}).get("score"), "poste": rec.get("fields",{}).get("poste",""), "langue": rec.get("fields",{}).get("langue",""), "chunks": rec.get("fields",{}).get("chunks",0), "date": rec.get("fields",{}).get("date","")} for rec in data.get("records",[])]
+    return [{"type": rec.get("fields",{}).get("type",""), "question": rec.get("fields",{}).get("question",""), "response": rec.get("fields",{}).get("response",""), "score": rec.get("fields",{}).get("score"), "poste": rec.get("fields",{}).get("poste",""), "langue": rec.get("fields",{}).get("langue",""), "chunks": rec.get("fields",{}).get("chunks",0), "date": rec.get("fields",{}).get("date",""), "email": rec.get("fields",{}).get("email",""), "tokens_input": rec.get("fields",{}).get("tokens_input",0), "tokens_output": rec.get("fields",{}).get("tokens_output",0), "latence_ms": rec.get("fields",{}).get("latence_ms",0), "cout_usd": rec.get("fields",{}).get("cout_usd",0)} for rec in data.get("records",[])]

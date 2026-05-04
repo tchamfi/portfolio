@@ -237,8 +237,47 @@ if st.session_state.admin_view:
             all_cout = sum(a.get("cout_usd",0) or 0 for a in analytics_data)
             latences = [a.get("latence_ms",0) for a in analytics_data if a.get("latence_ms")]
             avg_lat = round(sum(latences)/len(latences)) if latences else 0
+
+            m_tok_in = sum(a.get("tokens_input",0) or 0 for a in matchings)
+            m_tok_out = sum(a.get("tokens_output",0) or 0 for a in matchings)
+            m_cout = sum(a.get("cout_usd",0) or 0 for a in matchings)
+
+            c_tok_in = sum(a.get("tokens_input",0) or 0 for a in chats)
+            c_tok_out = sum(a.get("tokens_output",0) or 0 for a in chats)
+            c_cout = sum(a.get("cout_usd",0) or 0 for a in chats)
+
             if all_tok_in > 0:
-                st.markdown(f'<div style="background:#f8fafc;border-radius:16px;padding:20px;margin-bottom:1.5rem;border:1px solid #e2e8f0"><div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Monitoring LLM</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0"><div style="font-size:1.3rem;font-weight:900;color:#1e293b">{all_tok_in:,}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">tokens input</div></div><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0"><div style="font-size:1.3rem;font-weight:900;color:#1e293b">{all_tok_out:,}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">tokens output</div></div><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0"><div style="font-size:1.3rem;font-weight:900;color:#1e293b">{avg_lat:,} ms</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">latence moyenne</div></div><div style="text-align:center;background:white;border-radius:12px;padding:14px;border:1px solid #6366f1"><div style="font-size:1.3rem;font-weight:900;color:#6366f1">${all_cout:.4f}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">coût total</div></div></div></div>', unsafe_allow_html=True)
+                st.markdown(f'''<div style="background:#f8fafc;border-radius:16px;padding:20px;margin-bottom:1.5rem;border:1px solid #e2e8f0">
+<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Monitoring LLM</div>
+
+<div style="font-size:.72rem;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Total (matching + chat)</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+<div style="text-align:center;background:white;border-radius:12px;padding:12px;border:1px solid #e2e8f0"><div style="font-size:1.2rem;font-weight:900;color:#1e293b">{all_tok_in:,}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">tokens input</div></div>
+<div style="text-align:center;background:white;border-radius:12px;padding:12px;border:1px solid #e2e8f0"><div style="font-size:1.2rem;font-weight:900;color:#1e293b">{all_tok_out:,}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">tokens output</div></div>
+<div style="text-align:center;background:white;border-radius:12px;padding:12px;border:1px solid #e2e8f0"><div style="font-size:1.2rem;font-weight:900;color:#1e293b">{avg_lat:,} ms</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">latence moyenne</div></div>
+<div style="text-align:center;background:white;border-radius:12px;padding:12px;border:2px solid #6366f1"><div style="font-size:1.2rem;font-weight:900;color:#6366f1">${all_cout:.4f}</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">coût total</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div style="background:rgba(34,197,94,.04);border-radius:12px;padding:14px;border:1px solid rgba(34,197,94,.15)">
+<div style="font-size:.72rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Matching ({len([a for a in matchings if a.get("tokens_input")])} avec monitoring)</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<div style="text-align:center"><div style="font-size:1rem;font-weight:800;color:#1e293b">{m_tok_in:,}</div><div style="font-size:.65rem;color:#94a3b8">tokens in</div></div>
+<div style="text-align:center"><div style="font-size:1rem;font-weight:800;color:#1e293b">{m_tok_out:,}</div><div style="font-size:.65rem;color:#94a3b8">tokens out</div></div>
+<div style="text-align:center"><div style="font-size:1rem;font-weight:800;color:#16a34a">${m_cout:.4f}</div><div style="font-size:.65rem;color:#94a3b8">coût</div></div>
+</div>
+</div>
+
+<div style="background:rgba(99,102,241,.04);border-radius:12px;padding:14px;border:1px solid rgba(99,102,241,.15)">
+<div style="font-size:.72rem;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Chat ({len([a for a in chats if a.get("tokens_input")])} avec monitoring)</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<div style="text-align:center"><div style="font-size:1rem;font-weight:800;color:#1e293b">{c_tok_in:,}</div><div style="font-size:.65rem;color:#94a3b8">tokens in</div></div>
+<div style="text-align:center"><div style="font-size:1rem;font-weight:800;color:#1e293b">{c_tok_out:,}</div><div style="font-size:.65rem;color:#94a3b8">tokens out</div></div>
+<div style="text-align:center"><div style="font-size:1rem;font-weight:800;color:#6366f1">${c_cout:.4f}</div><div style="font-size:.65rem;color:#94a3b8">coût</div></div>
+</div>
+</div>
+</div>
+</div>''', unsafe_allow_html=True)
 
                 # Matchings list
                 st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Derniers matchings</div>', unsafe_allow_html=True)

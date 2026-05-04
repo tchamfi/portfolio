@@ -260,9 +260,12 @@ if st.session_state.admin_view:
 
             if all_tok_in > 0:
                 st.markdown(f'''<div style="background:#f8fafc;border-radius:16px;padding:20px;margin-bottom:1.5rem;border:1px solid #e2e8f0">
-<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Monitoring LLM</div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Monitoring LLM</div>
+<div style="display:flex;gap:8px"><span style="font-size:.72rem;font-weight:600;color:#64748b;background:#e2e8f0;padding:3px 10px;border-radius:100px">{n_monitored} interactions</span></div>
+</div>
 
-<div style="font-size:.72rem;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Total (matching + chat) — {n_monitored} interactions avec monitoring</div>
+<div style="font-size:.72rem;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Total</div>
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
 <div style="text-align:center;background:white;border-radius:12px;padding:12px;border:1px solid #e2e8f0"><div style="font-size:1.1rem;font-weight:900;color:#1e293b">{all_tok_in:,}</div><div style="font-size:.6rem;color:#94a3b8;margin-top:2px">total input</div><div style="font-size:.75rem;font-weight:600;color:#64748b;margin-top:4px">moy. {avg_tok_in:,}</div></div>
 <div style="text-align:center;background:white;border-radius:12px;padding:12px;border:1px solid #e2e8f0"><div style="font-size:1.1rem;font-weight:900;color:#1e293b">{all_tok_out:,}</div><div style="font-size:.6rem;color:#94a3b8;margin-top:2px">total output</div><div style="font-size:.75rem;font-weight:600;color:#64748b;margin-top:4px">moy. {avg_tok_out:,}</div></div>
@@ -272,7 +275,10 @@ if st.session_state.admin_view:
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
 <div style="background:rgba(34,197,94,.04);border-radius:12px;padding:14px;border:1px solid rgba(34,197,94,.15)">
-<div style="font-size:.72rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Matching — {len(m_monitored)} avec monitoring</div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+<div style="font-size:.72rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.06em">Matching</div>
+<span style="font-size:.68rem;font-weight:600;color:#16a34a;background:rgba(34,197,94,.1);padding:2px 8px;border-radius:100px">{len(m_monitored)}</span>
+</div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
 <div style="text-align:center"><div style="font-size:.95rem;font-weight:800;color:#1e293b">{m_tok_in:,}</div><div style="font-size:.6rem;color:#94a3b8">total in</div><div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">moy. {m_avg_in:,}</div></div>
 <div style="text-align:center"><div style="font-size:.95rem;font-weight:800;color:#1e293b">{m_tok_out:,}</div><div style="font-size:.6rem;color:#94a3b8">total out</div><div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">moy. {m_avg_out:,}</div></div>
@@ -281,7 +287,10 @@ if st.session_state.admin_view:
 </div>
 
 <div style="background:rgba(99,102,241,.04);border-radius:12px;padding:14px;border:1px solid rgba(99,102,241,.15)">
-<div style="font-size:.72rem;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Chat — {len(c_monitored)} avec monitoring</div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+<div style="font-size:.72rem;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.06em">Chat</div>
+<span style="font-size:.68rem;font-weight:600;color:#6366f1;background:rgba(99,102,241,.1);padding:2px 8px;border-radius:100px">{len(c_monitored)}</span>
+</div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
 <div style="text-align:center"><div style="font-size:.95rem;font-weight:800;color:#1e293b">{c_tok_in:,}</div><div style="font-size:.6rem;color:#94a3b8">total in</div><div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">moy. {c_avg_in:,}</div></div>
 <div style="text-align:center"><div style="font-size:.95rem;font-weight:800;color:#1e293b">{c_tok_out:,}</div><div style="font-size:.6rem;color:#94a3b8">total out</div><div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">moy. {c_avg_out:,}</div></div>

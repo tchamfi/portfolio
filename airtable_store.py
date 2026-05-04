@@ -120,6 +120,7 @@ def log_chat(question, response, lang="fr", chunks_used=0, metrics=None):
             "tokens_output": m.get("tokens_output", 0),
             "latence_ms": m.get("latence_ms", 0),
             "cout_usd": m.get("cout_usd", 0),
+            "model": m.get("model", ""),
         }}]}, timeout=10)
     except Exception as e:
         print(f"[analytics] log_chat error: {e}")
@@ -142,6 +143,7 @@ def log_matching(question, response, score=0, job_title="", lang="fr", chunks_us
         "tokens_output": m.get("tokens_output", 0),
         "latence_ms": m.get("latence_ms", 0),
         "cout_usd": m.get("cout_usd", 0),
+        "model": m.get("model", ""),
     }
     if email: fields["email"] = email
     try:
@@ -157,4 +159,4 @@ def load_analytics():
         resp.raise_for_status(); data = resp.json()
     except Exception as e:
         print(f"[airtable] load_analytics error: {e}"); return []
-    return [{"type": rec.get("fields",{}).get("type",""), "question": rec.get("fields",{}).get("question",""), "response": rec.get("fields",{}).get("response",""), "score": rec.get("fields",{}).get("score"), "poste": rec.get("fields",{}).get("poste",""), "langue": rec.get("fields",{}).get("langue",""), "chunks": rec.get("fields",{}).get("chunks",0), "date": rec.get("fields",{}).get("date",""), "email": rec.get("fields",{}).get("email",""), "tokens_input": rec.get("fields",{}).get("tokens_input",0), "tokens_output": rec.get("fields",{}).get("tokens_output",0), "latence_ms": rec.get("fields",{}).get("latence_ms",0), "cout_usd": rec.get("fields",{}).get("cout_usd",0)} for rec in data.get("records",[])]
+    return [{"type": rec.get("fields",{}).get("type",""), "question": rec.get("fields",{}).get("question",""), "response": rec.get("fields",{}).get("response",""), "score": rec.get("fields",{}).get("score"), "poste": rec.get("fields",{}).get("poste",""), "langue": rec.get("fields",{}).get("langue",""), "chunks": rec.get("fields",{}).get("chunks",0), "date": rec.get("fields",{}).get("date",""), "email": rec.get("fields",{}).get("email",""), "tokens_input": rec.get("fields",{}).get("tokens_input",0), "tokens_output": rec.get("fields",{}).get("tokens_output",0), "latence_ms": rec.get("fields",{}).get("latence_ms",0), "cout_usd": rec.get("fields",{}).get("cout_usd",0), "model": rec.get("fields",{}).get("model","")} for rec in data.get("records",[])]

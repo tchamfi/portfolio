@@ -141,7 +141,8 @@ def _timed_call(client, **kwargs):
         "tokens_input": response.usage.input_tokens,
         "tokens_output": response.usage.output_tokens,
         "latence_ms": int((time.time() - t0) * 1000),
-        "cout_usd": round(response.usage.input_tokens * COST_IN + response.usage.output_tokens * COST_OUT, 6)
+        "cout_usd": round(response.usage.input_tokens * COST_IN + response.usage.output_tokens * COST_OUT, 6),
+        "model": kwargs.get("model", "")
     }
 
 
@@ -151,7 +152,8 @@ def _merge_metrics(metrics_list):
         "tokens_input": sum(m.get("tokens_input", 0) for m in metrics_list),
         "tokens_output": sum(m.get("tokens_output", 0) for m in metrics_list),
         "latence_ms": sum(m.get("latence_ms", 0) for m in metrics_list),
-        "cout_usd": round(sum(m.get("cout_usd", 0) for m in metrics_list), 6)
+        "cout_usd": round(sum(m.get("cout_usd", 0) for m in metrics_list), 6),
+        "model": metrics_list[0].get("model", "") if metrics_list else ""
     }
 
 

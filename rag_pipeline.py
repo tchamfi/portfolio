@@ -163,7 +163,7 @@ Règles STRICTES :
     tokens_in = response.usage.input_tokens
     tokens_out = response.usage.output_tokens
     cout = round(tokens_in * CLAUDE_INPUT_COST + tokens_out * CLAUDE_OUTPUT_COST, 6)
-    return response.content[0].text, {"tokens_input": tokens_in, "tokens_output": tokens_out, "latence_ms": latence_ms, "cout_usd": cout}
+    return response.content[0].text, {"tokens_input": tokens_in, "tokens_output": tokens_out, "latence_ms": latence_ms, "cout_usd": cout, "model": llm["model"]}
 
 
 def ask(question):

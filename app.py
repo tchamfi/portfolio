@@ -305,8 +305,8 @@ if st.session_state.admin_view:
                     lat = m.get("latence_ms", 0) or 0
                     cout = m.get("cout_usd", 0) or 0
                     if tok_in:
-                        model_short = (m.get("model","") or "").replace("claude-","").replace("-20250514","").replace("-4-6","")
-                        model_badge = '<span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">🤖 ' + model_short + '</span>' if model_short else ""
+                        model_short = (m.get("model","") or "").replace("-20250514","").replace("-4-6","")
+                        model_badge = '<span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">' + model_short + '</span>' if model_short else ""
                         metrics_html = '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬆ ' + f"{tok_in:,}" + ' in</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬇ ' + f"{tok_out:,}" + ' out</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⏱ ' + f"{lat:,}" + ' ms</span><span style="font-size:.7rem;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:6px">$' + f"{cout:.4f}" + '</span>' + model_badge + '</div>'
                     else:
                         metrics_html = ""
@@ -324,8 +324,8 @@ if st.session_state.admin_view:
                     lat = c.get("latence_ms", 0) or 0
                     cout = c.get("cout_usd", 0) or 0
                     if tok_in:
-                        model_short = (c.get("model","") or "").replace("claude-","").replace("-20250514","").replace("-4-6","")
-                        model_badge = '<span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">🤖 ' + model_short + '</span>' if model_short else ""
+                        model_short = (c.get("model","") or "").replace("-20250514","").replace("-4-6","")
+                        model_badge = '<span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">' + model_short + '</span>' if model_short else ""
                         metrics_html = '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬆ ' + f"{tok_in:,}" + ' in</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬇ ' + f"{tok_out:,}" + ' out</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⏱ ' + f"{lat:,}" + ' ms</span><span style="font-size:.7rem;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:6px">$' + f"{cout:.4f}" + '</span>' + model_badge + '</div>'
                     else:
                         metrics_html = ""

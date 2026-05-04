@@ -249,7 +249,15 @@ if st.session_state.admin_view:
                     em_html = f'<span style="display:block;margin-top:4px;font-size:.75rem;color:#6366f1">📧 {m.get("email")}</span>' if m.get("email") else ""
                     date_str = m.get("date", "")
                     poste = m.get("poste", "Sans titre")
-                    st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:{sc_bg};border-left:4px solid {sc_col};display:flex;align-items:center;gap:14px"><div style="min-width:52px;text-align:center;background:white;border-radius:10px;padding:6px 0;box-shadow:0 2px 8px rgba(0,0,0,.06)"><div style="font-size:1.2rem;font-weight:900;color:{sc_col}">{sc}</div><div style="font-size:.6rem;color:#94a3b8">/100</div></div><div style="flex:1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">{poste}</div><div style="font-size:.75rem;color:#94a3b8;margin-top:2px">{date_str}</div>{em_html}</div></div>', unsafe_allow_html=True)
+                    tok_in = m.get("tokens_input", 0) or 0
+                    tok_out = m.get("tokens_output", 0) or 0
+                    lat = m.get("latence_ms", 0) or 0
+                    cout = m.get("cout_usd", 0) or 0
+                    if tok_in:
+                        metrics_html = '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬆ ' + f"{tok_in:,}" + ' in</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬇ ' + f"{tok_out:,}" + ' out</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⏱ ' + f"{lat:,}" + ' ms</span><span style="font-size:.7rem;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:6px">$' + f"{cout:.4f}" + '</span></div>'
+                    else:
+                        metrics_html = ""
+                    st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:{sc_bg};border-left:4px solid {sc_col};display:flex;align-items:flex-start;gap:14px"><div style="min-width:52px;text-align:center;background:white;border-radius:10px;padding:6px 0;box-shadow:0 2px 8px rgba(0,0,0,.06);flex-shrink:0"><div style="font-size:1.2rem;font-weight:900;color:{sc_col}">{sc}</div><div style="font-size:.6rem;color:#94a3b8">/100</div></div><div style="flex:1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">{poste}</div><div style="font-size:.75rem;color:#94a3b8;margin-top:2px">{date_str}</div>{em_html}{metrics_html}</div></div>', unsafe_allow_html=True)
 
             # Chat questions
             if chats:
@@ -258,7 +266,15 @@ if st.session_state.admin_view:
                     q = c.get("question", "")[:120]
                     r = c.get("response", "")[:200]
                     date_str = c.get("date", "")
-                    st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:rgba(99,102,241,.04);border-left:4px solid #6366f1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">💬 {q}</div><div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.4">{r}...</div><div style="font-size:.7rem;color:#94a3b8;margin-top:6px">{date_str}</div></div>', unsafe_allow_html=True)
+                    tok_in = c.get("tokens_input", 0) or 0
+                    tok_out = c.get("tokens_output", 0) or 0
+                    lat = c.get("latence_ms", 0) or 0
+                    cout = c.get("cout_usd", 0) or 0
+                    if tok_in:
+                        metrics_html = '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬆ ' + f"{tok_in:,}" + ' in</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⬇ ' + f"{tok_out:,}" + ' out</span><span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:6px">⏱ ' + f"{lat:,}" + ' ms</span><span style="font-size:.7rem;color:#6366f1;background:#eef2ff;padding:2px 8px;border-radius:6px">$' + f"{cout:.4f}" + '</span></div>'
+                    else:
+                        metrics_html = ""
+                    st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:rgba(99,102,241,.04);border-left:4px solid #6366f1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">💬 {q}</div><div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.4">{r}...</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">{date_str}</div>{metrics_html}</div>', unsafe_allow_html=True)
         else:
             st.markdown("""<div style="text-align:center;padding:3rem 1rem">
                 <div style="font-size:3rem;margin-bottom:1rem">📊</div>

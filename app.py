@@ -298,6 +298,60 @@ if st.session_state.admin_view:
 </div>
 </div>
 </div>
+
+<div style="background:#f8fafc;border-radius:16px;padding:20px;margin-bottom:1.5rem;border:1px solid #e2e8f0">
+<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Performance par modèle</div>''' + "".join([
+    f'''<div style="background:white;border-radius:12px;padding:14px;border:1px solid #e2e8f0;margin-bottom:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<div style="font-family:JetBrains Mono,monospace;font-size:.82rem;font-weight:700;color:#1e293b">{model}</div>
+<div style="display:flex;gap:6px">
+<span style="font-size:.65rem;font-weight:600;background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:100px">{mdata["count"]} interactions</span>
+<span style="font-size:.65rem;font-weight:600;background:#eef2ff;color:#6366f1;padding:2px 8px;border-radius:100px">${mdata["cout_total"]:.4f} total</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+<div style="text-align:center;background:#f8fafc;border-radius:8px;padding:8px">
+<div style="font-size:.9rem;font-weight:800;color:#1e293b">{mdata["tok_in_total"]:,}</div>
+<div style="font-size:.6rem;color:#94a3b8;margin-top:2px">tokens in total</div>
+<div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">moy. {mdata["tok_in_avg"]:,}</div>
+</div>
+<div style="text-align:center;background:#f8fafc;border-radius:8px;padding:8px">
+<div style="font-size:.9rem;font-weight:800;color:#1e293b">{mdata["tok_out_total"]:,}</div>
+<div style="font-size:.6rem;color:#94a3b8;margin-top:2px">tokens out total</div>
+<div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">moy. {mdata["tok_out_avg"]:,}</div>
+</div>
+<div style="text-align:center;background:#f8fafc;border-radius:8px;padding:8px">
+<div style="font-size:.9rem;font-weight:800;color:#1e293b">{mdata["lat_avg"]:,} ms</div>
+<div style="font-size:.6rem;color:#94a3b8;margin-top:2px">latence moy.</div>
+<div style="font-size:.7rem;font-weight:600;color:{"#16a34a" if mdata["lat_avg"]<10000 else "#d97706" if mdata["lat_avg"]<25000 else "#dc2626"};margin-top:2px">{"rapide" if mdata["lat_avg"]<10000 else "moyen" if mdata["lat_avg"]<25000 else "lent"}</div>
+</div>
+<div style="text-align:center;background:#f8fafc;border-radius:8px;padding:8px">
+<div style="font-size:.9rem;font-weight:800;color:#6366f1">${mdata["cout_avg"]:.4f}</div>
+<div style="font-size:.6rem;color:#94a3b8;margin-top:2px">coût moy./interaction</div>
+<div style="font-size:.7rem;font-weight:600;color:#6366f1;margin-top:2px">${mdata["cout_total"]:.4f} total</div>
+</div>
+<div style="text-align:center;background:#f8fafc;border-radius:8px;padding:8px">
+<div style="font-size:.9rem;font-weight:800;color:#1e293b">{mdata["ratio_out_in"]:.0%}</div>
+<div style="font-size:.6rem;color:#94a3b8;margin-top:2px">ratio out/in</div>
+<div style="font-size:.7rem;font-weight:600;color:#64748b;margin-top:2px">verbosité</div>
+</div>
+</div>
+</div>'''
+    for model, mdata in sorted(
+        {m: {
+            "count": len([a for a in analytics_data if (a.get("model") or "") == m and a.get("tokens_input")]),
+            "tok_in_total": sum(a.get("tokens_input",0) or 0 for a in analytics_data if (a.get("model") or "") == m),
+            "tok_out_total": sum(a.get("tokens_output",0) or 0 for a in analytics_data if (a.get("model") or "") == m),
+            "tok_in_avg": round(sum(a.get("tokens_input",0) or 0 for a in analytics_data if (a.get("model") or "") == m) / max(len([a for a in analytics_data if (a.get("model") or "") == m and a.get("tokens_input")]),1)),
+            "tok_out_avg": round(sum(a.get("tokens_output",0) or 0 for a in analytics_data if (a.get("model") or "") == m) / max(len([a for a in analytics_data if (a.get("model") or "") == m and a.get("tokens_input")]),1)),
+            "lat_avg": round(sum(a.get("latence_ms",0) or 0 for a in analytics_data if (a.get("model") or "") == m and a.get("latence_ms")) / max(len([a for a in analytics_data if (a.get("model") or "") == m and a.get("latence_ms")]),1)),
+            "cout_total": sum(a.get("cout_usd",0) or 0 for a in analytics_data if (a.get("model") or "") == m),
+            "cout_avg": (sum(a.get("cout_usd",0) or 0 for a in analytics_data if (a.get("model") or "") == m)) / max(len([a for a in analytics_data if (a.get("model") or "") == m and a.get("tokens_input")]),1),
+            "ratio_out_in": (sum(a.get("tokens_output",0) or 0 for a in analytics_data if (a.get("model") or "") == m)) / max(sum(a.get("tokens_input",0) or 0 for a in analytics_data if (a.get("model") or "") == m),1),
+        } for m in set((a.get("model") or "") for a in analytics_data if a.get("model"))}.items(),
+        key=lambda x: x[1]["count"], reverse=True
+    )
+]) + '''
 </div>''', unsafe_allow_html=True)
 
                 # Matchings list

@@ -18,6 +18,48 @@ st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷"
 
 st.markdown(CSS, unsafe_allow_html=True)
 
+# JS injection pour styler les onglets après le rendu Streamlit
+TAB_JS = """
+<script>
+function styleTabs() {
+  var tabs = document.querySelectorAll('[data-baseweb="tab"], button[role="tab"]');
+  if (!tabs.length) { setTimeout(styleTabs, 300); return; }
+  tabs.forEach(function(tab) {
+    var sel = tab.getAttribute('aria-selected') === 'true';
+    tab.style.setProperty('font-size', '1rem', 'important');
+    tab.style.setProperty('font-weight', '700', 'important');
+    tab.style.setProperty('border-radius', '12px', 'important');
+    tab.style.setProperty('padding', '14px 28px', 'important');
+    tab.style.setProperty('transition', 'all .2s ease', 'important');
+    tab.style.setProperty('cursor', 'pointer', 'important');
+    if (sel) {
+      tab.style.setProperty('background', '#1e293b', 'important');
+      tab.style.setProperty('color', '#ffffff', 'important');
+      tab.style.setProperty('border', '1.5px solid #1e293b', 'important');
+      tab.style.setProperty('box-shadow', '0 6px 20px rgba(30,41,59,.25)', 'important');
+    } else {
+      tab.style.setProperty('background', '#f1f5f9', 'important');
+      tab.style.setProperty('color', '#1e293b', 'important');
+      tab.style.setProperty('border', '1.5px solid #cbd5e1', 'important');
+      tab.style.setProperty('box-shadow', 'none', 'important');
+    }
+    // forcer la couleur sur tous les enfants
+    tab.querySelectorAll('p, span, div').forEach(function(el) {
+      el.style.setProperty('color', sel ? '#ffffff' : '#1e293b', 'important');
+      el.style.setProperty('font-size', '1rem', 'important');
+      el.style.setProperty('font-weight', '700', 'important');
+    });
+  });
+  // relancer après chaque interaction
+  setTimeout(styleTabs, 600);
+}
+styleTabs();
+var obs = new MutationObserver(function() { styleTabs(); });
+obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
+</script>
+"""
+st.markdown(TAB_JS, unsafe_allow_html=True)
+
 
 # --- Init ---
 if "db_initialized" not in st.session_state:

@@ -666,13 +666,14 @@ if "chat" in tab_dict:
                 )
             with fc2:
                 sent = st.form_submit_button("↑", use_container_width=True)
-        st.markdown('<div id="chat-bottom-anchor"></div>', unsafe_allow_html=True)
+        st.markdown('<div id="chat-bottom-anchor" style="height:1px"></div>', unsafe_allow_html=True)
         if len(st.session_state.messages) > 1:
             st.markdown("""<script>
-setTimeout(function(){
+function alScrollToChatBottom(){
   var el = document.getElementById('chat-bottom-anchor');
   if (el) el.scrollIntoView({behavior:'instant', block:'end'});
-}, 80);
+}
+[80, 250, 500, 900].forEach(function(t){ setTimeout(alScrollToChatBottom, t); });
 </script>""", unsafe_allow_html=True)
         if sent and typed:
             st.session_state.messages.append({"role":"user","content":typed})

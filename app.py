@@ -537,60 +537,43 @@ if st.session_state.current_tab not in tab_keys:
 
 active_key = st.session_state.current_tab
 
-# Custom HTML tab bar
-tab_btns_html = ""
-for label, key in tab_defs:
-    active_cls = "ctab-active" if key == active_key else ""
-    tab_btns_html += f'<button class="ctab {active_cls}" onclick="setTab(\'{key}\')">{label}</button>'
-
-st.markdown(f"""
-<style>
-.ctab-bar{{display:flex;gap:8px;background:white;padding:10px;border-radius:18px;border:1.5px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,.08);justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;}}
-.ctab{{font-family:'Outfit',sans-serif;font-size:1rem;font-weight:700;color:#1e293b;border-radius:12px;padding:14px 26px;background:#f1f5f9;border:1.5px solid #cbd5e1;cursor:pointer;transition:all .2s;outline:none;}}
-.ctab:hover{{background:#e2e8f0;border-color:#94a3b8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}}
-.ctab-active{{background:#1e293b!important;color:white!important;border-color:#1e293b!important;box-shadow:0 6px 20px rgba(30,41,59,.25);transform:translateY(-1px);}}
-</style>
-<div class="ctab-bar">{tab_btns_html}</div>
-<script>
-function setTab(key) {{
-  var inputs = window.parent.document.querySelectorAll('input[type=text]');
-  // Use Streamlit's event system via a hidden input trick
-  var event = new CustomEvent('streamlit:setTab', {{detail: key}});
-  window.parent.document.dispatchEvent(event);
-}}
-</script>
-""", unsafe_allow_html=True)
-
-# Hidden tab selector buttons (one per tab, used for state change)
-tab_cols = st.columns(len(tab_defs))
-for i, (label, key) in enumerate(tab_defs):
-    with tab_cols[i]:
-        if st.button(label, key=f"tab_btn_{key}", use_container_width=True):
-            st.session_state.current_tab = key
-            if key != "chat":
-                if "agent_results" not in st.session_state:
-                    pass
-            st.rerun()
-
+# Style des onglets natifs Streamlit (primary = actif, secondary = inactif)
 st.markdown("""<style>
-div[data-testid="stHorizontalBlock"] > div [data-testid="stButton"] button {
-    background: #f1f5f9!important;
-    color: #1e293b!important;
-    border: 1.5px solid #cbd5e1!important;
+div[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
     border-radius: 12px!important;
     font-size: 1rem!important;
     font-weight: 700!important;
     padding: 14px 20px!important;
     width: 100%!important;
-    box-shadow: none!important;
     font-family: 'Outfit', sans-serif!important;
+    transition: all .2s ease!important;
 }
-div[data-testid="stHorizontalBlock"] > div [data-testid="stButton"] button:hover {
+div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+    background: #f1f5f9!important;
+    color: #1e293b!important;
+    border: 1.5px solid #cbd5e1!important;
+    box-shadow: none!important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
     background: #e2e8f0!important;
     border-color: #94a3b8!important;
-    transform: translateY(-1px)!important;
+    transform: translateY(-1px);
+}
+div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+    background: #1e293b!important;
+    color: #ffffff!important;
+    border: 1.5px solid #1e293b!important;
+    box-shadow: 0 6px 20px rgba(30,41,59,.25)!important;
 }
 </style>""", unsafe_allow_html=True)
+
+tab_cols = st.columns(len(tab_defs))
+for i, (label, key) in enumerate(tab_defs):
+    with tab_cols[i]:
+        if st.button(label, key=f"tab_btn_{key}", use_container_width=True,
+                     type="primary" if key == active_key else "secondary"):
+            st.session_state.current_tab = key
+            st.rerun()
 
 # Create fake tab_dict for content rendering
 class FakeTab:

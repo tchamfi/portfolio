@@ -652,8 +652,17 @@ if "chat" in tab_dict:
                 chat_html+=f'<div class="chat-row user"><div class="chat-bubble bubble-user">{c}</div><div class="chat-avatar av-user">V</div></div>'
         chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
         st.markdown(chat_html,unsafe_allow_html=True)
-        typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
-        if typed:
+        with st.form("chat_form", clear_on_submit=True):
+            fc1, fc2 = st.columns([9, 1])
+            with fc1:
+                typed = st.text_input(
+                    "x",
+                    placeholder="Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?",
+                    key="chat_typed", label_visibility="collapsed"
+                )
+            with fc2:
+                sent = st.form_submit_button("↑", use_container_width=True)
+        if sent and typed:
             st.session_state.messages.append({"role":"user","content":typed})
             try: resp, metrics = ask(typed+get_config_context())
             except Exception as e: resp, metrics = f"Error: {e}", {}

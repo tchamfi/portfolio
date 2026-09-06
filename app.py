@@ -538,6 +538,8 @@ if st.session_state.current_tab not in tab_keys:
 active_key = st.session_state.current_tab
 
 # Style des onglets natifs Streamlit (primary = actif, secondary = inactif)
+# On couvre les 2 conventions possibles selon la version de Streamlit :
+# button[kind="..."] (versions plus anciennes) et [data-testid="stBaseButton-..."] (plus recentes)
 st.markdown("""<style>
 div[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
     border-radius: 12px!important;
@@ -548,24 +550,43 @@ div[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
     font-family: 'Outfit', sans-serif!important;
     transition: all .2s ease!important;
 }
-div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+div[data-testid="stHorizontalBlock"] button[kind="secondary"],
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"] {
     background: #f1f5f9!important;
-    color: #1e293b!important;
     border: 1.5px solid #cbd5e1!important;
     box-shadow: none!important;
 }
-div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+div[data-testid="stHorizontalBlock"] button[kind="secondary"] *,
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"] * {
+    color: #1e293b!important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover,
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"]:hover {
     background: #e2e8f0!important;
     border-color: #94a3b8!important;
     transform: translateY(-1px);
 }
-div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+div[data-testid="stHorizontalBlock"] button[kind="primary"],
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] {
     background: #1e293b!important;
-    color: #ffffff!important;
     border: 1.5px solid #1e293b!important;
     box-shadow: 0 6px 20px rgba(30,41,59,.25)!important;
 }
+div[data-testid="stHorizontalBlock"] button[kind="primary"] *,
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] * {
+    color: #ffffff!important;
+}
 </style>""", unsafe_allow_html=True)
+
+# Ancre juste au-dessus du contenu des onglets : apres un rerun (clic sur un onglet),
+# on scroll vers cette ancre au lieu de revenir tout en haut de la page (avant le hero).
+st.markdown('<div id="tab-content-anchor"></div>', unsafe_allow_html=True)
+st.markdown("""<script>
+setTimeout(function(){
+  var el = document.getElementById('tab-content-anchor');
+  if (el) el.scrollIntoView({behavior:'instant', block:'start'});
+}, 80);
+</script>""", unsafe_allow_html=True)
 
 tab_cols = st.columns(len(tab_defs))
 for i, (label, key) in enumerate(tab_defs):

@@ -5,7 +5,7 @@ Uses search_chunks() from rag_pipeline (TF-IDF based)
 
 import os, json
 from anthropic import Anthropic
-from rag_pipeline import search_chunks
+from rag_pipeline import search_chunks, _supports_temperature
 
 TOP_K = 10
 
@@ -24,19 +24,19 @@ def _get_llm_config():
         import streamlit as st
         cfg = st.session_state.get("config", {})
         return {
-            "model": cfg.get("llm_model", "claude-sonnet-4-20250514"),
+            "model": cfg.get("llm_model", "claude-sonnet-5"),
             "temp_matching": float(cfg.get("llm_temp_matching", "0.2")),
             "max_tokens_matching": int(cfg.get("llm_max_tokens_matching", "1500")),
         }
     except Exception:
-        return {"model": "claude-sonnet-4-20250514", "temp_matching": 0.2, "max_tokens_matching": 1500}
+        return {"model": "claude-sonnet-5", "temp_matching": 0.2, "max_tokens_matching": 1500}
 
 
 def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    response, metrics = _timed_call(client,
-        model=llm["model"], max_tokens=1024, temperature=llm["temp_matching"],
+    kwargs = dict(
+        model=llm["model"], max_tokens=1024,
         system="""Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
 {
@@ -52,6 +52,9 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
 }""",
         messages=[{"role": "user", "content": f"Analyse cette fiche de poste :\n\n{job_text}"}],
     )
+    if _supports_temperature(llm["model"]):
+        kwargs["temperature"] = llm["temp_matching"]
+    response, metrics = _timed_call(client, **kwargs)
     text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(text), metrics
@@ -66,9 +69,7 @@ def query_rag_profile(queries):
 def compute_matching(job_analysis, profile_context):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    response, metrics = _timed_call(client,
-        model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
-        system="""Tu es un expert en recrutement IT et en matching de profils senior.
+    system_prompt = """Tu es un expert en recrutement IT et en matching de profils senior.
 Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
 
 RÈGLES DE SCORING :
@@ -78,6 +79,7 @@ RÈGLES DE SCORING :
 - Les compétences méthodologiques (Scrum, pilotage, backlog, roadmap, KPIs) sont hautement transférables entre domaines.
 - Le score doit refléter la capacité RÉELLE du candidat à réussir dans le poste, pas un matching mot-à-mot.
 - Un profil qui coche 80% des critères avec des compétences transférables sur les 20% restants mérite 80-85, pas 60-70.
+- Sois précis et cohérent : pour une même fiche de poste, ton évaluation doit rester stable, pas dispersée.
 
 ÉCHELLE :
 - 90-100 : Match quasi parfait, expérience directe sur tous les points
@@ -100,9 +102,15 @@ Réponds au format JSON strict :
     "gaps_apprecies": ["compétences absentes marquées comme appréciées/optionnelles dans l'offre"],
     "arguments_cles": ["3 arguments convaincants pour un recruteur"],
     "conseil_approche": "conseil stratégique pour aborder le poste"
-}""",
+}"""
+    kwargs = dict(
+        model=llm["model"], max_tokens=llm["max_tokens_matching"],
+        system=system_prompt,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
     )
+    if _supports_temperature(llm["model"]):
+        kwargs["temperature"] = llm["temp_matching"]
+    response, metrics = _timed_call(client, **kwargs)
     text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(text), metrics

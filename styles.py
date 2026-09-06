@@ -101,12 +101,12 @@ CSS = """
     .m-card .m-value{font-size:1.4rem;font-weight:800;color:#1e293b!important;}
     .m-card .m-desc{font-size:.75rem;color:#94a3b8!important;margin-top:.2rem;}
 
-    .stTabs [data-baseweb="tab-list"]{background:white;border-radius:16px;padding:8px;gap:4px;border:none!important;box-shadow:0 1px 3px rgba(0,0,0,.04);justify-content:center;outline:none!important;}
-    .stTabs [data-baseweb="tab"]{font-weight:600!important;font-size:.88rem;color:#64748b!important;border-radius:10px;padding:12px 24px;background:transparent;border:none!important;transition:all .25s ease;}
-    .stTabs [data-baseweb="tab"] p,.stTabs [data-baseweb="tab"] span,.stTabs [data-baseweb="tab"] div{font-weight:600!important;color:#64748b!important;}
-    .stTabs [data-baseweb="tab"]:hover{color:#1e293b!important;background:#f1f5f9;}
+    .stTabs [data-baseweb="tab-list"]{background:white;border-radius:16px;padding:8px;gap:6px;border:1px solid rgba(0,0,0,.07)!important;box-shadow:0 2px 8px rgba(0,0,0,.06);justify-content:center;outline:none!important;}
+    .stTabs [data-baseweb="tab"]{font-weight:600!important;font-size:.88rem;color:#334155!important;border-radius:10px;padding:12px 24px;background:#f8fafc;border:1px solid #e2e8f0!important;transition:all .25s ease;}
+    .stTabs [data-baseweb="tab"] p,.stTabs [data-baseweb="tab"] span,.stTabs [data-baseweb="tab"] div{font-weight:600!important;color:#334155!important;}
+    .stTabs [data-baseweb="tab"]:hover{color:#1e293b!important;background:#f1f5f9;border-color:#cbd5e1!important;}
     .stTabs [data-baseweb="tab"]:hover p,.stTabs [data-baseweb="tab"]:hover span{color:#1e293b!important;}
-    .stTabs [aria-selected="true"]{background:#1e293b!important;color:#ffffff!important;border:none!important;box-shadow:0 4px 12px rgba(30,41,59,.15);-webkit-text-fill-color:#ffffff!important;}
+    .stTabs [aria-selected="true"]{background:#1e293b!important;color:#ffffff!important;border:1px solid #1e293b!important;box-shadow:0 4px 12px rgba(30,41,59,.2);-webkit-text-fill-color:#ffffff!important;}
     .stTabs [aria-selected="true"] p,.stTabs [aria-selected="true"] span,.stTabs [aria-selected="true"] div{color:#ffffff!important;-webkit-text-fill-color:#ffffff!important;font-weight:600!important;}
     .stTabs [data-baseweb="tab-highlight"],.stTabs [data-baseweb="tab-border"]{display:none!important;}
     .stTabs [data-baseweb="tab-panel"]{padding-top:2rem;}

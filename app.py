@@ -2,7 +2,7 @@
 Ask Lionel — Portfolio V2.5 (Hugging Face deployment)
 """
 
-import re, json
+import re, json, time
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
@@ -585,12 +585,12 @@ div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] 
 st.markdown('<div id="tab-content-anchor"></div>', unsafe_allow_html=True)
 _skip_top_anchor = (active_key == "chat" and len(st.session_state.get("messages", [])) > 1)
 if not _skip_top_anchor:
-    st.markdown("""<script>
+    components.html("""<script>
 setTimeout(function(){
-  var el = document.getElementById('tab-content-anchor');
+  var el = window.parent.document.getElementById('tab-content-anchor');
   if (el) el.scrollIntoView({behavior:'instant', block:'start'});
 }, 80);
-</script>""", unsafe_allow_html=True)
+</script>""", height=0)
 
 tab_cols = st.columns(len(tab_defs))
 for i, (label, key) in enumerate(tab_defs):
@@ -654,7 +654,7 @@ if "chat" in tab_dict:
                 chat_html+=f'<div class="chat-row assistant"><div class="chat-avatar av-bot">L</div><div class="chat-bubble bubble-bot">{c}</div></div>'
             else:
                 chat_html+=f'<div class="chat-row user"><div class="chat-bubble bubble-user">{c}</div><div class="chat-avatar av-user">V</div></div>'
-        chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
+        chat_html+='</div>'
         st.markdown(chat_html,unsafe_allow_html=True)
         with st.form("chat_form", clear_on_submit=True):
             fc1, fc2 = st.columns([9, 1])
@@ -668,13 +668,15 @@ if "chat" in tab_dict:
                 sent = st.form_submit_button("↑", use_container_width=True)
         st.markdown('<div id="chat-bottom-anchor" style="height:1px"></div>', unsafe_allow_html=True)
         if len(st.session_state.messages) > 1:
-            st.markdown("""<script>
+            components.html("""<script>
 function alScrollToChatBottom(){
-  var el = document.getElementById('chat-bottom-anchor');
+  var box = window.parent.document.getElementById('chat-box');
+  if (box) box.scrollTop = box.scrollHeight;
+  var el = window.parent.document.getElementById('chat-bottom-anchor');
   if (el) el.scrollIntoView({behavior:'instant', block:'end'});
 }
-[80, 250, 500, 900].forEach(function(t){ setTimeout(alScrollToChatBottom, t); });
-</script>""", unsafe_allow_html=True)
+[80, 250, 500, 900, 1500].forEach(function(t){ setTimeout(alScrollToChatBottom, t); });
+</script>""", height=0)
         if sent and typed:
             st.session_state.messages.append({"role":"user","content":typed})
             try: resp, metrics = ask(typed+get_config_context())

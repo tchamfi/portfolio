@@ -5,7 +5,7 @@ Uses search_chunks() from rag_pipeline (TF-IDF based)
 
 import os, json
 from anthropic import Anthropic
-from rag_pipeline import search_chunks, _supports_temperature
+from rag_pipeline import search_chunks
 
 TOP_K = 10
 
@@ -36,7 +36,7 @@ def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
     kwargs = dict(
-        model=llm["model"], max_tokens=1024,
+        model=llm["model"], max_tokens=1024, temperature=llm["temp_matching"],
         system="""Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
 {
@@ -52,8 +52,6 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
 }""",
         messages=[{"role": "user", "content": f"Analyse cette fiche de poste :\n\n{job_text}"}],
     )
-    if _supports_temperature(llm["model"]):
-        kwargs["temperature"] = llm["temp_matching"]
     response, metrics = _timed_call(client, **kwargs)
     text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
     try:
@@ -104,12 +102,10 @@ Réponds au format JSON strict :
     "conseil_approche": "conseil stratégique pour aborder le poste"
 }"""
     kwargs = dict(
-        model=llm["model"], max_tokens=llm["max_tokens_matching"],
+        model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
         system=system_prompt,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
     )
-    if _supports_temperature(llm["model"]):
-        kwargs["temperature"] = llm["temp_matching"]
     response, metrics = _timed_call(client, **kwargs)
     text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
     try:
@@ -139,12 +135,28 @@ RÈGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes à puc
 
 
 def _timed_call(client, **kwargs):
-    """Wrapper to capture tokens and latency on any Claude call."""
+    """Wrapper to capture tokens and latency on any Claude call. Retries without
+    'temperature' if the installed SDK / model rejects it (Sonnet 5 and later no
+    longer support sampling params, and requirements.txt pins anthropic>=0.45.0
+    without an upper bound, so this can change under us on redeploy)."""
     import time
     COST_IN = 3.0 / 1_000_000
     COST_OUT = 15.0 / 1_000_000
     t0 = time.time()
-    response = client.messages.create(**kwargs)
+    try:
+        response = client.messages.create(**kwargs)
+    except TypeError as e:
+        if "temperature" in str(e) and "temperature" in kwargs:
+            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
+            response = client.messages.create(**kwargs)
+        else:
+            raise
+    except Exception as e:
+        if "temperature" in str(e).lower() and "temperature" in kwargs:
+            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
+            response = client.messages.create(**kwargs)
+        else:
+            raise
     return response, {
         "tokens_input": response.usage.input_tokens,
         "tokens_output": response.usage.output_tokens,

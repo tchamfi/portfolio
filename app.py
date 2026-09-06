@@ -761,16 +761,6 @@ if "recos" in tab_dict:
             st.success("Thank you! Your recommendation has been submitted and will appear after validation." if lang=="en" else "Merci ! Votre recommandation a été soumise et apparaîtra après validation.")
             del st.session_state.reco_submitted
 
-# AUTO-CLICK TAB after rerun
-if active_tab is not None:
-    st.markdown(f"""<script>
-    function clickTab() {{
-        var tabs = document.querySelectorAll('[data-baseweb="tab"]');
-        if (tabs.length > {active_tab}) {{ tabs[{active_tab}].click(); }}
-        else {{ setTimeout(clickTab, 100); }}
-    }}
-    setTimeout(clickTab, 300);
-    </script>""", unsafe_allow_html=True)
 
 # FOOTER
 st.markdown("---")

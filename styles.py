@@ -127,12 +127,12 @@ CSS = """
     .bubble-bot{background:#f8fafc;border:1px solid rgba(0,0,0,.04);border-top-left-radius:4px;}
     .bubble-user{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.1);border-top-right-radius:4px;}
 
-    .stChatInput{position:relative;z-index:10;}
+    .stChatInput{z-index:10!important;}
     .stChatInput > div{background:white!important;border:1.5px solid rgba(0,0,0,.08)!important;border-radius:14px!important;transition:border-color .2s;}
     .stChatInput > div:focus-within{border-color:#6366f1!important;box-shadow:0 0 0 3px rgba(99,102,241,.1)!important;}
     .stChatInput input, .stChatInput textarea{color:#1e293b!important;-webkit-text-fill-color:#1e293b!important;cursor:text!important;caret-color:#6366f1!important;}
     .stChatInput input::placeholder, .stChatInput textarea::placeholder{color:#94a3b8!important;-webkit-text-fill-color:#94a3b8!important;opacity:1!important;}
-    [data-testid="stChatInput"]{position:relative;z-index:10;}
+    [data-testid="stChatInput"]{z-index:10!important;}
     [data-testid="stChatInput"] input, [data-testid="stChatInput"] textarea{color:#1e293b!important;-webkit-text-fill-color:#1e293b!important;cursor:text!important;caret-color:#6366f1!important;}
     [data-testid="stChatInput"] input::placeholder, [data-testid="stChatInput"] textarea::placeholder{color:#94a3b8!important;-webkit-text-fill-color:#94a3b8!important;opacity:1!important;}
     .stTextInput input:focus, .stTextArea textarea:focus, input[type="text"]:focus, input[type="password"]:focus, textarea:focus{border-color:#6366f1!important;box-shadow:0 0 0 3px rgba(99,102,241,.08)!important;outline:none!important;caret-color:#6366f1!important;}

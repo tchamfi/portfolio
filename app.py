@@ -514,7 +514,7 @@ if cfg.get("show_metrics",True):
     st.markdown("<br>",unsafe_allow_html=True)
 
 # ============================================================
-# MAIN NAVIGATION TABS — dynamic based on visibility settings
+# MAIN NAVIGATION TABS — custom HTML implementation
 # ============================================================
 tab_defs = []
 tab_defs.append(("Profil" if lang=="fr" else "About me", "profil"))
@@ -527,17 +527,85 @@ if cfg.get("show_rdv", True):
 if cfg.get("show_recos", True):
     tab_defs.append(("Recommandations" if lang=="fr" else "Recommendations", "recos"))
 
-main_tabs = [t[0] for t in tab_defs]
 tab_keys = [t[1] for t in tab_defs]
 
-# Auto-click tab after rerun
-active_tab=st.session_state.pop("active_tab",None)
+# Determine active tab from session state or default
+if "current_tab" not in st.session_state:
+    st.session_state.current_tab = "profil"
+if st.session_state.current_tab not in tab_keys:
+    st.session_state.current_tab = tab_keys[0]
 
-created_tabs = st.tabs(main_tabs)
-tab_dict = {tab_keys[i]: created_tabs[i] for i in range(len(tab_keys))}
+active_key = st.session_state.current_tab
+
+# Custom HTML tab bar
+tab_btns_html = ""
+for label, key in tab_defs:
+    active_cls = "ctab-active" if key == active_key else ""
+    tab_btns_html += f'<button class="ctab {active_cls}" onclick="setTab(\'{key}\')">{label}</button>'
+
+st.markdown(f"""
+<style>
+.ctab-bar{{display:flex;gap:8px;background:white;padding:10px;border-radius:18px;border:1.5px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,.08);justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;}}
+.ctab{{font-family:'Outfit',sans-serif;font-size:1rem;font-weight:700;color:#1e293b;border-radius:12px;padding:14px 26px;background:#f1f5f9;border:1.5px solid #cbd5e1;cursor:pointer;transition:all .2s;outline:none;}}
+.ctab:hover{{background:#e2e8f0;border-color:#94a3b8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}}
+.ctab-active{{background:#1e293b!important;color:white!important;border-color:#1e293b!important;box-shadow:0 6px 20px rgba(30,41,59,.25);transform:translateY(-1px);}}
+</style>
+<div class="ctab-bar">{tab_btns_html}</div>
+<script>
+function setTab(key) {{
+  var inputs = window.parent.document.querySelectorAll('input[type=text]');
+  // Use Streamlit's event system via a hidden input trick
+  var event = new CustomEvent('streamlit:setTab', {{detail: key}});
+  window.parent.document.dispatchEvent(event);
+}}
+</script>
+""", unsafe_allow_html=True)
+
+# Hidden tab selector buttons (one per tab, used for state change)
+tab_cols = st.columns(len(tab_defs))
+for i, (label, key) in enumerate(tab_defs):
+    with tab_cols[i]:
+        if st.button(label, key=f"tab_btn_{key}", use_container_width=True):
+            st.session_state.current_tab = key
+            if key != "chat":
+                if "agent_results" not in st.session_state:
+                    pass
+            st.rerun()
+
+st.markdown("""<style>
+div[data-testid="stHorizontalBlock"] > div [data-testid="stButton"] button {
+    background: #f1f5f9!important;
+    color: #1e293b!important;
+    border: 1.5px solid #cbd5e1!important;
+    border-radius: 12px!important;
+    font-size: 1rem!important;
+    font-weight: 700!important;
+    padding: 14px 20px!important;
+    width: 100%!important;
+    box-shadow: none!important;
+    font-family: 'Outfit', sans-serif!important;
+}
+div[data-testid="stHorizontalBlock"] > div [data-testid="stButton"] button:hover {
+    background: #e2e8f0!important;
+    border-color: #94a3b8!important;
+    transform: translateY(-1px)!important;
+}
+</style>""", unsafe_allow_html=True)
+
+# Create fake tab_dict for content rendering
+class FakeTab:
+    def __init__(self, is_active): self._active = is_active
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
+
+tab_dict = {key: FakeTab(key == active_key) for _, key in tab_defs}
+
+def show_tab(key):
+    return active_key == key
+
 
 # --- TAB 1 : PROFIL ---
-with tab_dict["profil"]:
+if show_tab("profil"):
     # Profil paragraphs
     if cfg.get("show_profil",True):
         pk="_en" if lang=="en" else ""
@@ -567,7 +635,7 @@ with tab_dict["profil"]:
 
 # --- TAB 2 : CHAT RAG ---
 if "chat" in tab_dict:
-    with tab_dict["chat"]:
+    if show_tab("chat"):
         st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
         chat_html='<div class="chat-box" id="chat-box">'
         for msg in st.session_state.messages:
@@ -591,7 +659,7 @@ if "chat" in tab_dict:
 
 # --- TAB 3 : MATCHING ---
 if "matching" in tab_dict:
-    with tab_dict["matching"]:
+    if show_tab("matching"):
         if is_private: st.markdown('<span style="font-family:JetBrains Mono;font-size:.7rem;padding:4px 12px;border-radius:100px;border:1px solid rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.06)">PRIVATE</span>',unsafe_allow_html=True)
         matching_title = "Profile Matching — How compatible am I with your position?" if lang=="en" else "Matching de profil — Suis-je le bon candidat pour votre poste ?"
         matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes compétences et mon expérience, et générer un score de compatibilité avec les arguments clés."
@@ -651,7 +719,7 @@ if "matching" in tab_dict:
 
 # --- TAB 4 : RDV ---
 if "rdv" in tab_dict:
-    with tab_dict["rdv"]:
+    if show_tab("rdv"):
         cal=cfg.get("calendly","")
         if cal:
             st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Réservez un appel découverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un créneau qui vous convient. 30 minutes pour échanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
@@ -659,7 +727,7 @@ if "rdv" in tab_dict:
 
 # --- TAB 5 : RECOMMANDATIONS ---
 if "recos" in tab_dict:
-    with tab_dict["recos"]:
+    if show_tab("recos"):
         approved=[r for r in recos if r.get("approved")]
         reco_html=""
         for r in approved:

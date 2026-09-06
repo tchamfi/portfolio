@@ -445,10 +445,10 @@ if st.session_state.admin_view:
     with at9:
         st.markdown("**Configuration du modèle IA**")
         st.caption("Ces paramètres s'appliquent immédiatement après sauvegarde — pas besoin de redéployer.")
-        model_opts = ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"]
-        cur_model = cfg.get("llm_model", "claude-sonnet-4-20250514")
+        model_opts = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+        cur_model = cfg.get("llm_model", "claude-sonnet-5")
         new_llm_model = st.selectbox("Modèle", model_opts, index=model_opts.index(cur_model) if cur_model in model_opts else 0, key="llm_model")
-        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher.")
+        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher. Sonnet 5 ignore/rejette le paramètre temperature (parametres d'echantillonnage retires par Anthropic) : le reglage ci-dessous n'a d'effet que sur Haiku.")
         llm1, llm2 = st.columns(2)
         with llm1:
             st.markdown("**Chat RAG**")
@@ -580,8 +580,12 @@ div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] 
 
 # Ancre juste au-dessus du contenu des onglets : apres un rerun (clic sur un onglet),
 # on scroll vers cette ancre au lieu de revenir tout en haut de la page (avant le hero).
+# Exception : sur l'onglet chat, une fois qu'il y a un echange, c'est le scroll vers le bas
+# (juste apres le champ de saisie) qui prend le relais, plus bas dans la page.
 st.markdown('<div id="tab-content-anchor"></div>', unsafe_allow_html=True)
-st.markdown("""<script>
+_skip_top_anchor = (active_key == "chat" and len(st.session_state.get("messages", [])) > 1)
+if not _skip_top_anchor:
+    st.markdown("""<script>
 setTimeout(function(){
   var el = document.getElementById('tab-content-anchor');
   if (el) el.scrollIntoView({behavior:'instant', block:'start'});
@@ -662,6 +666,14 @@ if "chat" in tab_dict:
                 )
             with fc2:
                 sent = st.form_submit_button("↑", use_container_width=True)
+        st.markdown('<div id="chat-bottom-anchor"></div>', unsafe_allow_html=True)
+        if len(st.session_state.messages) > 1:
+            st.markdown("""<script>
+setTimeout(function(){
+  var el = document.getElementById('chat-bottom-anchor');
+  if (el) el.scrollIntoView({behavior:'instant', block:'end'});
+}, 80);
+</script>""", unsafe_allow_html=True)
         if sent and typed:
             st.session_state.messages.append({"role":"user","content":typed})
             try: resp, metrics = ask(typed+get_config_context())

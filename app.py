@@ -445,10 +445,13 @@ if st.session_state.admin_view:
     with at9:
         st.markdown("**Configuration du modèle IA**")
         st.caption("Ces paramètres s'appliquent immédiatement après sauvegarde — pas besoin de redéployer.")
-        model_opts = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+        model_opts = [
+            "claude-sonnet-5", "claude-haiku-4-5-20251001", "claude-opus-5",
+            "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-6-astra",
+        ]
         cur_model = cfg.get("llm_model", "claude-sonnet-5")
         new_llm_model = st.selectbox("Modèle", model_opts, index=model_opts.index(cur_model) if cur_model in model_opts else 0, key="llm_model")
-        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher. Sonnet 5 ignore/rejette le paramètre temperature (parametres d'echantillonnage retires par Anthropic) : le reglage ci-dessous n'a d'effet que sur Haiku.")
+        st.caption("Claude (Sonnet/Haiku/Opus) et OpenAI (Luna/Terra/Sol/Astra) sont supportés. Sonnet 5, toute la famille GPT-5.6/GPT-6 et Opus 4.7+ ignorent le paramètre temperature (modèles de raisonnement) : le réglage ci-dessous n'a d'effet que sur Haiku.")
         llm1, llm2 = st.columns(2)
         with llm1:
             st.markdown("**Chat RAG**")

@@ -7,46 +7,11 @@ import os
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from anthropic import Anthropic
 from cv_data import CV_CHUNKS
 from doc_loader import load_documents_as_chunks
+from llm_provider import complete as llm_complete
 
 TOP_K = 12
-
-# Le SDK anthropic installe (requirements.txt: anthropic>=0.45.0, sans plafond) peut avoir
-# supprime le support de "temperature" independamment du modele demande. Plutot que de deviner
-# par nom de modele, on tente l'appel avec temperature et on retente sans si ca echoue precisement
-# sur ce parametre (que ce soit un TypeError cote SDK ou une erreur 400 cote API).
-def _create_message(client, **kwargs):
-    try:
-        return client.messages.create(**kwargs)
-    except TypeError as e:
-        if "temperature" in str(e) and "temperature" in kwargs:
-            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
-            return client.messages.create(**kwargs)
-        raise
-    except Exception as e:
-        if "temperature" in str(e).lower() and "temperature" in kwargs:
-            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
-            return client.messages.create(**kwargs)
-        raise
-
-def _extract_text(response):
-    """Concatenate all text blocks in a Claude response, skipping any non-text
-    block (thinking, redacted_thinking, tool_use, etc.) instead of assuming
-    content[0] is text — that assumption breaks with models/modes that put a
-    non-text block first."""
-    parts = []
-    for block in getattr(response, "content", []) or []:
-        t = getattr(block, "text", None)
-        if t:
-            parts.append(t)
-    return "".join(parts)
-
-def _supports_temperature(model):
-    # Conserve pour compatibilite mais plus utilise directement : voir _create_message ci-dessus.
-    _NO_SAMPLING_PARAMS_MODELS = ("claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-fable-5", "claude-mythos-5")
-    return not any(m in (model or "") for m in _NO_SAMPLING_PARAMS_MODELS)
 
 _vectorizer = None
 _tfidf_matrix = None
@@ -169,13 +134,7 @@ def _get_llm_config():
         return {"model": "claude-sonnet-5", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
 
 
-CLAUDE_INPUT_COST = 3.0 / 1_000_000   # $3 per million input tokens
-CLAUDE_OUTPUT_COST = 15.0 / 1_000_000  # $15 per million output tokens
-
-
 def generate_response(question, context):
-    import time
-    client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
     system_prompt = """Tu ES Lionel TCHAMFONG. Tu réponds en première personne (je, mon, mes) aux questions des recruteurs et clients.
 Règles STRICTES :
@@ -187,19 +146,12 @@ Règles STRICTES :
 - Si l'information n'est pas dans le contexte, dis simplement : "Je vous invite à me contacter directement pour en discuter."
 - Sois professionnel, précis, engageant et concret. Donne des exemples réels de tes missions."""
 
-    t0 = time.time()
-    kwargs = dict(
-        model=llm["model"], max_tokens=llm["max_tokens_chat"],
-        system=system_prompt,
-        messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
-        temperature=llm["temp_chat"],
+    user_content = f"Contexte :\n{context}\n\n---\nQuestion : {question}"
+    text, metrics = llm_complete(
+        model=llm["model"], system=system_prompt, user_content=user_content,
+        max_tokens=llm["max_tokens_chat"], temperature=llm["temp_chat"],
     )
-    response = _create_message(client, **kwargs)
-    latence_ms = int((time.time() - t0) * 1000)
-    tokens_in = response.usage.input_tokens
-    tokens_out = response.usage.output_tokens
-    cout = round(tokens_in * CLAUDE_INPUT_COST + tokens_out * CLAUDE_OUTPUT_COST, 6)
-    return _extract_text(response), {"tokens_input": tokens_in, "tokens_output": tokens_out, "latence_ms": latence_ms, "cout_usd": cout, "model": llm["model"]}
+    return text, metrics
 
 
 def ask(question):

@@ -3,19 +3,11 @@ agent.py — Portfolio matching agent
 Uses search_chunks() from rag_pipeline (TF-IDF based)
 """
 
-import os, json
-from anthropic import Anthropic
-from rag_pipeline import search_chunks, _extract_text
+import json
+from rag_pipeline import search_chunks
+from llm_provider import complete as llm_complete
 
 TOP_K = 10
-
-
-def _get_api_key():
-    try:
-        import streamlit as st
-        return st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", ""))
-    except Exception:
-        return os.getenv("ANTHROPIC_API_KEY", "")
 
 
 def _get_llm_config():
@@ -33,11 +25,8 @@ def _get_llm_config():
 
 
 def analyze_job_posting(job_text):
-    client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    kwargs = dict(
-        model=llm["model"], max_tokens=1024, temperature=llm["temp_matching"],
-        system="""Tu es un expert en analyse de fiches de poste IT.
+    system = """Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
 {
     "titre": "titre du poste",
@@ -49,11 +38,13 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
     "points_cles": ["3-5 exigences importantes"],
     "secteur": "secteur",
     "remote_possible": true/false
-}""",
-        messages=[{"role": "user", "content": f"Analyse cette fiche de poste :\n\n{job_text}"}],
+}"""
+    text, metrics = llm_complete(
+        model=llm["model"], system=system,
+        user_content=f"Analyse cette fiche de poste :\n\n{job_text}",
+        max_tokens=1024, temperature=llm["temp_matching"],
     )
-    response, metrics = _timed_call(client, **kwargs)
-    text = _extract_text(response).strip().replace("```json", "").replace("```", "").strip()
+    text = text.strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(text), metrics
     except json.JSONDecodeError:
@@ -65,7 +56,6 @@ def query_rag_profile(queries):
 
 
 def compute_matching(job_analysis, profile_context):
-    client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
     system_prompt = """Tu es un expert en recrutement IT et en matching de profils senior.
 Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
@@ -96,6 +86,7 @@ POINTS D'ATTENTION — TON SOUPLE ET CONSTRUCTIF :
 - Pour chaque point d'attention, cherche dans le profil l'expérience la plus proche de ce qui manque et cite-la explicitement, même si ce n'est pas un équivalent exact.
 - Explique ensuite pourquoi l'écart n'est pas réellement problématique : proximité avec un outil ou une technologie déjà maîtrisée, capacité de montée en compétence démontrée ailleurs dans le profil, nature du manque (théorique vs pratique, périphérique vs central au poste).
 - Distingue une compétence adjacente ponctuelle d'une expertise réellement profonde et durable. Si le profil montre qu'une compétence proche est pratiquée depuis longtemps ou de façon répétée sur plusieurs expériences (pas une mention isolée), présente-la comme une expertise solide et directement pertinente, pas comme "une base extensible" ou un simple point de départ. Ne minimise pas une compétence forte pour rester dans un registre uniformément prudent.
+- Cette structure (expérience proche + pourquoi ce n'est pas grave) s'applique à CHAQUE point d'attention, sans exception, même quand l'écart est large ou porte sur un sujet central du poste. Un écart plus large mérite une reformulation plus honnête sur son ampleur, jamais une bascule vers un ton d'avertissement ("écart réel à combler rapidement", "point bloquant potentiel", etc.). Si tu ne trouves aucune expérience proche à citer pour un point donné, dis-le explicitement plutôt que de laisser le point sans relativisation ("c'est un sujet neuf pour le candidat, sans équivalent direct dans son parcours à ce jour") : la formulation reste factuelle, jamais alarmiste.
 - Ne formule jamais un point d'attention comme si tu citais une phrase prononcée par le candidat (ex. "le candidat le reconnaît lui-même"). C'est toi, l'évaluateur, qui portes le jugement à partir du profil. Reste au style évaluation neutre, jamais au style citation ou aveu.
 - Le ton doit rester factuel et honnête, jamais alarmiste. L'objectif est d'aider le lecteur à relativiser un manque, pas de le minimiser artificiellement ni d'inventer une expérience qui n'existe pas.
 - Exemple de formulation attendue : "Pas d'expérience directe sur [X], mais une pratique récente de [Y proche] et une capacité de montée en compétence déjà démontrée sur [Z] rendent cet écart facilement comblable."
@@ -110,13 +101,12 @@ Réponds au format JSON strict :
     "arguments_cles": ["3 arguments convaincants pour un recruteur"],
     "conseil_approche": "conseil stratégique pour aborder le poste"
 }"""
-    kwargs = dict(
-        model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
-        system=system_prompt,
-        messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
+    user_content = f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"
+    text, metrics = llm_complete(
+        model=llm["model"], system=system_prompt, user_content=user_content,
+        max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
     )
-    response, metrics = _timed_call(client, **kwargs)
-    text = _extract_text(response).strip().replace("```json", "").replace("```", "").strip()
+    text = text.strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(text), metrics
     except json.JSONDecodeError:
@@ -124,7 +114,6 @@ Réponds au format JSON strict :
 
 
 def draft_response(job_analysis, matching, response_type="email"):
-    client = Anthropic(api_key=_get_api_key())
     if response_type == "email":
         instruction = """Rédige un email de candidature professionnel, concis (max 250 mots). Signé : Lionel TCHAMFONG.
 RÈGLES DE FORMAT STRICTES :
@@ -136,43 +125,12 @@ RÈGLES DE FORMAT STRICTES :
         instruction = """Rédige un pitch oral de 2 minutes, confiant et concret.
 RÈGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes à puces, pas de caractères spéciaux."""
     llm = _get_llm_config()
-    response, metrics = _timed_call(client,
-        model=llm["model"], max_tokens=llm["max_tokens_matching"], system=instruction,
-        messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"}],
+    user_content = f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"
+    text, metrics = llm_complete(
+        model=llm["model"], system=instruction, user_content=user_content,
+        max_tokens=llm["max_tokens_matching"],
     )
-    return _extract_text(response), metrics
-
-
-def _timed_call(client, **kwargs):
-    """Wrapper to capture tokens and latency on any Claude call. Retries without
-    'temperature' if the installed SDK / model rejects it (Sonnet 5 and later no
-    longer support sampling params, and requirements.txt pins anthropic>=0.45.0
-    without an upper bound, so this can change under us on redeploy)."""
-    import time
-    COST_IN = 3.0 / 1_000_000
-    COST_OUT = 15.0 / 1_000_000
-    t0 = time.time()
-    try:
-        response = client.messages.create(**kwargs)
-    except TypeError as e:
-        if "temperature" in str(e) and "temperature" in kwargs:
-            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
-            response = client.messages.create(**kwargs)
-        else:
-            raise
-    except Exception as e:
-        if "temperature" in str(e).lower() and "temperature" in kwargs:
-            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
-            response = client.messages.create(**kwargs)
-        else:
-            raise
-    return response, {
-        "tokens_input": response.usage.input_tokens,
-        "tokens_output": response.usage.output_tokens,
-        "latence_ms": int((time.time() - t0) * 1000),
-        "cout_usd": round(response.usage.input_tokens * COST_IN + response.usage.output_tokens * COST_OUT, 6),
-        "model": kwargs.get("model", "")
-    }
+    return text, metrics
 
 
 def _merge_metrics(metrics_list):

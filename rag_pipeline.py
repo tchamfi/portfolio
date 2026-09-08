@@ -13,29 +13,6 @@ from doc_loader import load_documents_as_chunks
 
 TOP_K = 12
 
-# Le SDK anthropic installe (requirements.txt: anthropic>=0.45.0, sans plafond) peut avoir
-# supprime le support de "temperature" independamment du modele demande. Plutot que de deviner
-# par nom de modele, on tente l'appel avec temperature et on retente sans si ca echoue precisement
-# sur ce parametre (que ce soit un TypeError cote SDK ou une erreur 400 cote API).
-def _create_message(client, **kwargs):
-    try:
-        return client.messages.create(**kwargs)
-    except TypeError as e:
-        if "temperature" in str(e) and "temperature" in kwargs:
-            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
-            return client.messages.create(**kwargs)
-        raise
-    except Exception as e:
-        if "temperature" in str(e).lower() and "temperature" in kwargs:
-            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
-            return client.messages.create(**kwargs)
-        raise
-
-def _supports_temperature(model):
-    # Conserve pour compatibilite mais plus utilise directement : voir _create_message ci-dessus.
-    _NO_SAMPLING_PARAMS_MODELS = ("claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-fable-5", "claude-mythos-5")
-    return not any(m in (model or "") for m in _NO_SAMPLING_PARAMS_MODELS)
-
 _vectorizer = None
 _tfidf_matrix = None
 _all_chunks = None
@@ -148,16 +125,27 @@ def _get_llm_config():
         import streamlit as st
         cfg = st.session_state.get("config", {})
         return {
-            "model": cfg.get("llm_model", "claude-sonnet-5"),
+            "model": cfg.get("llm_model", "claude-sonnet-4-20250514"),
             "temp_chat": float(cfg.get("llm_temp_chat", "1.0")),
             "top_k": int(cfg.get("llm_top_k", "12")),
             "max_tokens_chat": int(cfg.get("llm_max_tokens_chat", "1024")),
         }
     except Exception:
-        return {"model": "claude-sonnet-5", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
+        return {"model": "claude-sonnet-4-20250514", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
 
 
-CLAUDE_INPUT_COST = 3.0 / 1_000_000   # $3 per million input tokens
+def _extract_text(response):
+    """Extract text from Anthropic response — handles all SDK versions."""
+    for block in response.content:
+        if hasattr(block, "text"):
+            return block.text
+        if hasattr(block, "value"):
+            return block.value
+        try:
+            return str(block)
+        except Exception:
+            continue
+    return ""
 CLAUDE_OUTPUT_COST = 15.0 / 1_000_000  # $15 per million output tokens
 
 
@@ -176,18 +164,17 @@ Règles STRICTES :
 - Sois professionnel, précis, engageant et concret. Donne des exemples réels de tes missions."""
 
     t0 = time.time()
-    kwargs = dict(
+    response = client.messages.create(
         model=llm["model"], max_tokens=llm["max_tokens_chat"],
+        temperature=llm["temp_chat"],
         system=system_prompt,
         messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
-        temperature=llm["temp_chat"],
     )
-    response = _create_message(client, **kwargs)
     latence_ms = int((time.time() - t0) * 1000)
     tokens_in = response.usage.input_tokens
     tokens_out = response.usage.output_tokens
     cout = round(tokens_in * CLAUDE_INPUT_COST + tokens_out * CLAUDE_OUTPUT_COST, 6)
-    return response.content[0].text, {"tokens_input": tokens_in, "tokens_output": tokens_out, "latence_ms": latence_ms, "cout_usd": cout, "model": llm["model"]}
+    return _extract_text(response), {"tokens_input": tokens_in, "tokens_output": tokens_out, "latence_ms": latence_ms, "cout_usd": cout, "model": llm["model"]}
 
 
 def ask(question):

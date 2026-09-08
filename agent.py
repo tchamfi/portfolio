@@ -28,6 +28,14 @@ def analyze_job_posting(job_text):
     llm = _get_llm_config()
     system = """Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
+
+RÈGLE DE STABILITÉ — IMPORTANTE :
+Pour competences_requises, competences_methodologiques et points_cles, reprends les termes
+EXACTS utilisés dans la fiche de poste (mêmes mots, même casse, pas de synonyme, pas de
+traduction, pas de reformulation, pas de regroupement de plusieurs termes en un seul). Le
+but est que la même fiche produise toujours la même extraction, pour que la recherche qui
+suit dans le profil retombe systématiquement sur les mêmes résultats.
+
 {
     "titre": "titre du poste",
     "entreprise": "nom ou null",
@@ -60,27 +68,34 @@ def compute_matching(job_analysis, profile_context):
     system_prompt = """Tu es un expert en recrutement IT et en matching de profils senior.
 Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
 
-RÈGLES DE SCORING :
+RÈGLES D'ÉVALUATION DES COMPÉTENCES :
 - Tu évalues les COMPÉTENCES TRANSFÉRABLES, pas seulement les mots-clés exacts.
   Exemple : expérience Splunk/CloudWatch = transférable vers Datadog/Grafana. Expérience AWS = transférable vers Azure/GCP.
 - Un candidat senior qui maîtrise un outil équivalent à celui demandé doit être crédité, pas pénalisé.
 - Les compétences méthodologiques (Scrum, pilotage, backlog, roadmap, KPIs) sont hautement transférables entre domaines.
-- Le score doit refléter la capacité RÉELLE du candidat à réussir dans le poste, pas un matching mot-à-mot.
-- Un profil qui coche 80% des critères avec des compétences transférables sur les 20% restants mérite 80-85, pas 60-70.
-- Sois précis et cohérent : pour une même fiche de poste, ton évaluation doit rester stable, pas dispersée.
 
-ÉCHELLE :
-- 90-100 : Match quasi parfait, expérience directe sur tous les points
-- 80-89 : Très bon match, compétences transférables sur les points manquants
-- 70-79 : Bon match avec quelques gaps significatifs
-- 60-69 : Match partiel, gaps importants
-- <60 : Profil éloigné
+CALCUL DU SCORE — MÉTHODE MÉCANIQUE, À SUIVRE DANS CET ORDRE :
+Le score n'est jamais une impression globale, c'est le résultat d'un calcul. Applique exactement
+ces étapes, dans cet ordre, sans raccourci :
+1. Dresse la liste complète des entrées de competences_requises et competences_methodologiques
+   de la fiche (chaque entrée comptée une seule fois, sans doublon).
+2. Pour chaque entrée, détermine si le profil la couvre — directement ou via une compétence
+   réellement transférable (voir règles ci-dessus) — ou si elle est absente.
+3. Chaque entrée absente est classée gaps_imperatifs ou gaps_apprecies selon les critères de
+   la section suivante.
+4. Calcule : score = 100 − (nombre de gaps_imperatifs × 15) − (nombre de gaps_apprecies × 5).
+5. Si le résultat est inférieur à 15, remonte-le à 15. Si le résultat dépasse 100, ramène-le à 100.
+6. N'ajuste jamais ce chiffre par une impression générale ("le profil semble solide donc +5") :
+   le résultat de l'étape 4-5 EST le score final, arrondi à l'entier le plus proche.
+Cette méthode remplace tout jugement libre sur le score : deux passages sur la même fiche avec
+la même liste de gaps doivent toujours produire exactement le même score.
 
 ANALYSE DES GAPS — TRÈS IMPORTANT :
 - gaps_imperatifs : compétences ABSENTES du profil qui sont réellement centrales pour le poste. Ce sont des bloquants.
 - gaps_apprecies : compétences ABSENTES du profil qui sont secondaires ou complémentaires pour le poste. Ce sont des nice-to-have.
 - Ne te limite pas à repérer des mots-clés comme "requis" ou "apprécié". Juge l'importance réelle de chaque compétence absente à partir du contexte : est-elle dans une section clé de l'offre (titre, résumé, premières lignes) ou noyée dans une longue liste secondaire ? revient-elle plusieurs fois ? est-elle formulée avec une intensité forte ("maîtrise", "expert", "indispensable") ou mentionnée en passant ? une offre peut exiger une compétence sans utiliser un mot comme "requis", et à l'inverse citer une compétence secondaire avec un vocabulaire qui semble strict.
 - En cas de doute réel sur l'importance d'une compétence, classe-la plutôt en gaps_apprecies : le bénéfice du doute va au candidat, pas à l'exclusion automatique.
+- Cette classification doit elle-même être stable : pour la même fiche et le même profil, une compétence donnée doit toujours atterrir dans la même catégorie (gap_imperatif ou gap_apprecie), pas tantôt l'une tantôt l'autre.
 
 POINTS D'ATTENTION — TON SOUPLE ET CONSTRUCTIF :
 - Pour chaque point d'attention, cherche dans le profil l'expérience la plus proche de ce qui manque et cite-la explicitement, même si ce n'est pas un équivalent exact.

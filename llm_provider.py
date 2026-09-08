@@ -78,35 +78,50 @@ def _extract_anthropic_text(response):
     return "".join(parts)
 
 
+def _retry_without_unsupported_param(client, kwargs, error):
+    """Certains modeles (plus anciens, ou variantes) peuvent rejeter 'temperature'
+    ou 'thinking' selon leur version. On retire le parametre incrimine et on
+    retente une seule fois, plutot que de deviner a l'avance quel modele
+    supporte quoi."""
+    msg = str(error).lower()
+    kwargs = dict(kwargs)
+    removed = False
+    if "thinking" in msg and "thinking" in kwargs:
+        kwargs.pop("thinking", None)
+        removed = True
+    if "temperature" in msg and "temperature" in kwargs:
+        kwargs.pop("temperature", None)
+        removed = True
+    if not removed:
+        raise error
+    return client.messages.create(**kwargs)
+
+
 def _call_anthropic(model, system, user_content, max_tokens, temperature):
     from anthropic import Anthropic
     client = Anthropic(api_key=_get_anthropic_key())
-    # Comme pour les modeles OpenAI de raisonnement, un modele Anthropic recent
-    # peut emettre un bloc de reflexion interne avant le texte final. Si ce
-    # bloc consomme tout le budget max_tokens, aucun texte n'est produit et la
-    # reponse extraite est vide. On garantit un plancher pour laisser de la
-    # place au texte visible apres un eventuel raisonnement interne.
+    # Le plancher de max_tokens reste utile en filet de securite, mais la vraie
+    # cause d'une reponse vide sur les modeles recents (Sonnet 5 et suivants) est
+    # l'"adaptive thinking", active par defaut depuis Sonnet 5 : le modele peut
+    # reflechir avant de repondre, et ce raisonnement consomme le meme budget
+    # max_tokens que le texte final — jusqu'a l'epuiser entierement sur un prompt
+    # structure comme les notres. On le desactive explicitement : ces appels
+    # (extraction JSON, scoring) n'en ont pas besoin, et ca supprime au passage
+    # une source de variance supplementaire entre deux runs sur la meme fiche.
     effective_max = max(max_tokens, 4000)
     kwargs = dict(
         model=model, max_tokens=effective_max, system=system,
         messages=[{"role": "user", "content": user_content}],
+        thinking={"type": "disabled"},
     )
     if temperature is not None and not _no_sampling_params(model):
         kwargs["temperature"] = temperature
     try:
         response = client.messages.create(**kwargs)
     except TypeError as e:
-        if "temperature" in str(e) and "temperature" in kwargs:
-            kwargs.pop("temperature", None)
-            response = client.messages.create(**kwargs)
-        else:
-            raise
+        response = _retry_without_unsupported_param(client, kwargs, e)
     except Exception as e:
-        if "temperature" in str(e).lower() and "temperature" in kwargs:
-            kwargs.pop("temperature", None)
-            response = client.messages.create(**kwargs)
-        else:
-            raise
+        response = _retry_without_unsupported_param(client, kwargs, e)
     text = _extract_anthropic_text(response)
     tokens_in = response.usage.input_tokens
     tokens_out = response.usage.output_tokens

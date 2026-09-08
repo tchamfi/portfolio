@@ -147,8 +147,21 @@ def _timed_call(client, **kwargs):
     import time
     COST_IN = 3.0 / 1_000_000
     COST_OUT = 15.0 / 1_000_000
+    # Ensure numeric types are correct
+    if "temperature" in kwargs:
+        kwargs["temperature"] = float(kwargs["temperature"])
+    if "max_tokens" in kwargs:
+        kwargs["max_tokens"] = int(kwargs["max_tokens"])
     t0 = time.time()
-    response = client.messages.create(**kwargs)
+    try:
+        response = client.messages.create(**kwargs)
+    except TypeError as e:
+        if "temperature" in str(e):
+            # Newer SDK / model doesn't accept temperature — retry without it
+            kwargs.pop("temperature", None)
+            response = client.messages.create(**kwargs)
+        else:
+            raise
     return response, {
         "tokens_input": response.usage.input_tokens,
         "tokens_output": response.usage.output_tokens,

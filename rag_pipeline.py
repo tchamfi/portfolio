@@ -164,12 +164,22 @@ Règles STRICTES :
 - Sois professionnel, précis, engageant et concret. Donne des exemples réels de tes missions."""
 
     t0 = time.time()
-    response = client.messages.create(
-        model=llm["model"], max_tokens=llm["max_tokens_chat"],
-        temperature=llm["temp_chat"],
-        system=system_prompt,
-        messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
-    )
+    try:
+        response = client.messages.create(
+            model=llm["model"], max_tokens=llm["max_tokens_chat"],
+            temperature=llm["temp_chat"],
+            system=system_prompt,
+            messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
+        )
+    except TypeError as e:
+        if "temperature" in str(e):
+            response = client.messages.create(
+                model=llm["model"], max_tokens=llm["max_tokens_chat"],
+                system=system_prompt,
+                messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
+            )
+        else:
+            raise
     latence_ms = int((time.time() - t0) * 1000)
     tokens_in = response.usage.input_tokens
     tokens_out = response.usage.output_tokens

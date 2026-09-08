@@ -92,6 +92,13 @@ ANALYSE DES GAPS — TRÈS IMPORTANT :
 - En cas de doute réel sur l'importance d'une compétence, classe-la plutôt en gaps_apprecies : le bénéfice du doute va au candidat, pas à l'exclusion automatique.
 - Cette classification doit elle-même être stable : pour la même fiche et le même profil, une compétence donnée doit toujours atterrir dans la même catégorie (gap_imperatif ou gap_apprecie), pas tantôt l'une tantôt l'autre.
 
+RÈGLE SPÉCIFIQUE AU PROFIL PRODUCT OWNER — À APPLIQUER AVANT DE CLASSER UNE COMPÉTENCE TECHNIQUE :
+Le candidat est Product Owner / Product Manager, pas développeur. Distingue deux natures de compétences :
+- Compétences cœur de métier PO (backlog, priorisation, stakeholders, méthodologie Agile, vision produit, KPIs, roadmap, animation d'équipe) : classe-les normalement, aucune pondération particulière ici.
+- Compétences techniques/outillage (frameworks, langages, architectures, plateformes cloud, briques IA spécifiques, etc.) que l'offre présente comme un sujet à piloter, comprendre, ou pour dialoguer avec les équipes techniques (verbes/tournures comme "familiarité avec", "compréhension de", "à l'aise avec", "collaborer avec les ingénieurs sur", "capable d'échanger sur") : même absentes du profil, classe-les en gaps_apprecies plutôt qu'en gaps_imperatifs. Un PO n'est pas censé les implémenter lui-même, seulement en comprendre les enjeux pour piloter le produit.
+- Exception : si l'offre exige explicitement une pratique développeur ou hands-on de cette compétence technique précise (verbes comme "coder", "développer", "implémenter vous-même", "écrire du code", "expérience de développement direct"), traite-la alors comme n'importe quelle autre compétence requise, sans cette pondération PO.
+- En cas de doute sur le niveau d'exigence réel, relis la formulation exacte de l'offre (le verbe utilisé, son intensité) plutôt que de supposer par défaut un niveau élevé.
+
 POINTS D'ATTENTION — TON SOUPLE ET CONSTRUCTIF :
 - Pour chaque point d'attention, cherche dans le profil l'expérience la plus proche de ce qui manque et cite-la explicitement, même si ce n'est pas un équivalent exact.
 - Explique ensuite pourquoi l'écart n'est pas réellement problématique : proximité avec un outil ou une technologie déjà maîtrisée, capacité de montée en compétence démontrée ailleurs dans le profil, nature du manque (théorique vs pratique, périphérique vs central au poste).
@@ -118,21 +125,37 @@ Réponds au format JSON strict, SANS le champ score_global (il est calculé aill
     text = text.strip().replace("```json", "").replace("```", "").strip()
     try:
         matching = json.loads(text)
-        matching["score_global"] = _compute_score(matching)
+        matching["score_global"] = _compute_score(matching, job_analysis)
         return matching, metrics
     except json.JSONDecodeError:
         return {"raw_matching": text, "error": "JSON parse failed"}, metrics
 
 
-def _compute_score(matching):
+def _compute_score(matching, job_analysis=None):
     """Calcule le score de matching de facon deterministe en Python, a partir
     du nombre de gaps que le modele a classes — jamais via un score que le
     modele calculerait et rapporterait lui-meme (peu fiable pour de
-    l'arithmetique, verifie empiriquement sur des cas reels)."""
+    l'arithmetique, verifie empiriquement sur des cas reels).
+
+    Le poids de chaque gap est proportionnel au nombre total de competences
+    listees dans l'offre (une offre courte penalise plus par gap qu'une offre
+    longue), mais toujours contenu entre un plancher et un plafond fixes pour
+    ne jamais devenir absurde dans un sens ou dans l'autre."""
     n_imperatifs = len(matching.get("gaps_imperatifs", []) or [])
     n_apprecies = len(matching.get("gaps_apprecies", []) or [])
-    score = 100 - (n_imperatifs * 15) - (n_apprecies * 5)
-    return max(15, min(100, score))
+
+    total = 0
+    if job_analysis:
+        total = len(job_analysis.get("competences_requises", []) or []) \
+              + len(job_analysis.get("competences_methodologiques", []) or [])
+    if total <= 0:
+        total = max(n_imperatifs + n_apprecies, 1)
+
+    poids_imperatif = max(8, min(18, 70 / total))
+    poids_apprecie = max(3, min(8, 30 / total))
+
+    score = 100 - (n_imperatifs * poids_imperatif) - (n_apprecies * poids_apprecie)
+    return max(15, min(100, round(score)))
 
 
 def draft_response(job_analysis, matching, response_type="email"):

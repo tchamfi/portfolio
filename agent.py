@@ -29,36 +29,67 @@ def _get_llm_config():
 
 def _extract_text(response):
     """Extract text from Anthropic response — handles all SDK versions."""
-    for block in response.content:
-        # Pydantic v2 model_dump (newer SDK versions)
+    import re as _re
+    try:
+        content = response.content
+        if not content:
+            return ""
+        block = content[0]
+
+        # 1. model_dump (Pydantic v2)
         try:
             d = block.model_dump()
-            if isinstance(d, dict) and d.get("text"):
+            if d.get("text") and isinstance(d["text"], str):
                 return d["text"]
         except Exception:
             pass
-        # Direct .text attribute (standard SDK)
+
+        # 2. Direct .text
         try:
             t = block.text
-            if t is not None:
-                return str(t)
+            if t is not None and isinstance(t, str):
+                return t
         except Exception:
             pass
-        # __dict__ fallback
+
+        # 3. __dict__
         try:
             d2 = block.__dict__
-            if isinstance(d2, dict) and d2.get("text"):
+            if d2.get("text") and isinstance(d2["text"], str):
                 return d2["text"]
         except Exception:
             pass
-        # .value fallback
+
+        # 4. getattr loop
+        for attr in ("text", "value", "content", "_text"):
+            try:
+                v = getattr(block, attr, None)
+                if v and isinstance(v, str):
+                    return v
+            except Exception:
+                pass
+
+        # 5. Parse repr/str — handles TextBlock(type='text', text='...')
         try:
-            v = block.value
-            if v is not None:
-                return str(v)
+            s = repr(block)
+            m = _re.search(r"text='(.*?)'(?:\s*[,\)])", s, _re.DOTALL)
+            if m:
+                return m.group(1)
+            m = _re.search(r'text="(.*?)"(?:\s*[,\)])', s, _re.DOTALL)
+            if m:
+                return m.group(1)
+            # broader: anything between text= and end
+            m = _re.search(r"text=(['\"])(.*?)\1", s, _re.DOTALL)
+            if m:
+                return m.group(2)
         except Exception:
             pass
-    return ""
+
+        # 6. Return repr so we can debug
+        return f"[DEBUG_BLOCK: {repr(block)[:500]}]"
+
+    except Exception as ex:
+        return f"[DEBUG_ERR: {ex}]"
 
 
 def _parse_json(text):

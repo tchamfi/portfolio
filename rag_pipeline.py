@@ -136,32 +136,37 @@ def _get_llm_config():
 
 def _extract_text(response):
     """Extract text from Anthropic response — handles all SDK versions."""
-    for block in response.content:
+    import re as _re
+    try:
+        content = response.content
+        if not content:
+            return ""
+        block = content[0]
         try:
             d = block.model_dump()
-            if isinstance(d, dict) and d.get("text"):
-                return d["text"]
-        except Exception:
-            pass
+            if d.get("text") and isinstance(d["text"], str): return d["text"]
+        except Exception: pass
         try:
             t = block.text
-            if t is not None:
-                return str(t)
-        except Exception:
-            pass
+            if t is not None and isinstance(t, str): return t
+        except Exception: pass
         try:
             d2 = block.__dict__
-            if isinstance(d2, dict) and d2.get("text"):
-                return d2["text"]
-        except Exception:
-            pass
+            if d2.get("text") and isinstance(d2["text"], str): return d2["text"]
+        except Exception: pass
+        for attr in ("text","value","content","_text"):
+            try:
+                v = getattr(block, attr, None)
+                if v and isinstance(v, str): return v
+            except Exception: pass
         try:
-            v = block.value
-            if v is not None:
-                return str(v)
-        except Exception:
-            pass
-    return ""
+            s = repr(block)
+            m = _re.search(r"text=(['\"])(.*?)\1", s, _re.DOTALL)
+            if m: return m.group(2)
+        except Exception: pass
+        return f"[DEBUG_BLOCK: {repr(block)[:300]}]"
+    except Exception as ex:
+        return f"[DEBUG_ERR: {ex}]"
 CLAUDE_OUTPUT_COST = 15.0 / 1_000_000  # $15 per million output tokens
 
 

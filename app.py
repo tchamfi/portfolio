@@ -713,7 +713,8 @@ if "matching" in tab_dict:
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")
                 if matching and matching.get("error"):
-                    st.error(f"Erreur matching : {matching.get('error')} — {matching.get('detail', matching.get('raw_matching',''))[:200]}")
+                    st.error(f"Erreur matching : {matching.get('error')}")
+                    st.code(matching.get('detail', matching.get('raw_matching',''))[:1000])
                 elif matching and not matching.get("error"):
                     score=matching.get("score_global",0)
                     sc="low" if score<60 else ("mid" if score<80 else "high")

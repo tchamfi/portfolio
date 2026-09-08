@@ -81,8 +81,14 @@ def _extract_anthropic_text(response):
 def _call_anthropic(model, system, user_content, max_tokens, temperature):
     from anthropic import Anthropic
     client = Anthropic(api_key=_get_anthropic_key())
+    # Comme pour les modeles OpenAI de raisonnement, un modele Anthropic recent
+    # peut emettre un bloc de reflexion interne avant le texte final. Si ce
+    # bloc consomme tout le budget max_tokens, aucun texte n'est produit et la
+    # reponse extraite est vide. On garantit un plancher pour laisser de la
+    # place au texte visible apres un eventuel raisonnement interne.
+    effective_max = max(max_tokens, 4000)
     kwargs = dict(
-        model=model, max_tokens=max_tokens, system=system,
+        model=model, max_tokens=effective_max, system=system,
         messages=[{"role": "user", "content": user_content}],
     )
     if temperature is not None and not _no_sampling_params(model):

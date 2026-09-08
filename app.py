@@ -714,14 +714,32 @@ if "matching" in tab_dict:
             run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
         with co:
             if run and job.strip():
-                with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
-                try:
-                    _res=st.session_state.agent_results; _m=_res.get("matching",{})
-                    log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email, metrics=_res.get("metrics",{}))
-                except: pass
+                with st.spinner("..."):
+                    try:
+                        st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
+                        st.session_state.pop("agent_error", None)
+                    except Exception as e:
+                        st.session_state.pop("agent_results", None)
+                        st.session_state.agent_error = str(e)
+                if "agent_results" in st.session_state:
+                    try:
+                        _res=st.session_state.agent_results; _m=_res.get("matching",{})
+                        log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email, metrics=_res.get("metrics",{}))
+                    except: pass
+            if st.session_state.get("agent_error"):
+                if is_private:
+                    st.error(f"Erreur lors de l'appel au modèle : {st.session_state.agent_error}")
+                else:
+                    st.warning("Une erreur est survenue pendant l'analyse. Merci de réessayer dans quelques instants." if lang=="fr" else "Something went wrong during the analysis. Please try again in a moment.")
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")
-                if matching and not matching.get("error"):
+                if matching and matching.get("error"):
+                    if is_private:
+                        st.error("Le modèle n'a pas renvoyé de JSON exploitable (réponse vide ou tronquée). Réponse brute reçue :")
+                        st.code(matching.get("raw_matching") or res.get("job_analysis",{}).get("raw_analysis") or "(réponse vide)", language=None)
+                    else:
+                        st.warning("Une erreur est survenue pendant l'analyse. Merci de réessayer, ou de reformuler votre fiche de poste si le problème persiste." if lang=="fr" else "Something went wrong during the analysis. Please try again, or reformat your job posting if the issue persists.")
+                elif matching and not matching.get("error"):
                     score=matching.get("score_global",0)
                     sc="low" if score<50 else ("mid" if score<70 else ("good" if score<=90 else "high"))
                     sc_col="#c2666a" if score<50 else ("#c2842a" if score<70 else ("#4ade80" if score<=90 else "#15803d"))

@@ -128,7 +128,12 @@ def _call_openai(model, system, user_content, max_tokens, temperature):
     # Famille GPT-5.6 / GPT-6 : modeles de raisonnement, passent par l'API
     # Responses (pas Chat Completions), utilisent max_output_tokens, et
     # n'acceptent pas de temperature personnalisee (fixee a 1 cote OpenAI).
-    kwargs = dict(model=model, instructions=system, input=user_content, max_output_tokens=max_tokens)
+    # Les tokens de raisonnement interne sont decomptes du meme budget que la
+    # reponse visible : un max_tokens hérité d'un appel Claude (souvent 1024-1500)
+    # peut donc etre entierement consomme par le raisonnement, laissant une
+    # reponse vide. On garantit un plancher pour eviter ce cas.
+    effective_max = max(max_tokens, 4000) if model in OPENAI_MODELS else max_tokens
+    kwargs = dict(model=model, instructions=system, input=user_content, max_output_tokens=effective_max)
     if model in OPENAI_MODELS:
         kwargs["reasoning"] = {"effort": "low"}  # reponses courtes et rapides, coherent avec l'usage du site
     if temperature is not None and not _no_sampling_params(model):

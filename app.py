@@ -2,7 +2,7 @@
 Ask Lionel — Portfolio V2.5 (Hugging Face deployment)
 """
 
-import re, json, time
+import re, json
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
@@ -445,10 +445,10 @@ if st.session_state.admin_view:
     with at9:
         st.markdown("**Configuration du modèle IA**")
         st.caption("Ces paramètres s'appliquent immédiatement après sauvegarde — pas besoin de redéployer.")
-        model_opts = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
-        cur_model = cfg.get("llm_model", "claude-sonnet-5")
+        model_opts = ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"]
+        cur_model = cfg.get("llm_model", "claude-sonnet-4-20250514")
         new_llm_model = st.selectbox("Modèle", model_opts, index=model_opts.index(cur_model) if cur_model in model_opts else 0, key="llm_model")
-        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher. Sonnet 5 ignore/rejette le paramètre temperature (parametres d'echantillonnage retires par Anthropic) : le reglage ci-dessous n'a d'effet que sur Haiku.")
+        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher.")
         llm1, llm2 = st.columns(2)
         with llm1:
             st.markdown("**Chat RAG**")
@@ -537,68 +537,60 @@ if st.session_state.current_tab not in tab_keys:
 
 active_key = st.session_state.current_tab
 
-# Style des onglets natifs Streamlit (primary = actif, secondary = inactif)
-# On couvre les 2 conventions possibles selon la version de Streamlit :
-# button[kind="..."] (versions plus anciennes) et [data-testid="stBaseButton-..."] (plus recentes)
+# Custom HTML tab bar
+tab_btns_html = ""
+for label, key in tab_defs:
+    active_cls = "ctab-active" if key == active_key else ""
+    tab_btns_html += f'<button class="ctab {active_cls}" onclick="setTab(\'{key}\')">{label}</button>'
+
+st.markdown(f"""
+<style>
+.ctab-bar{{display:flex;gap:8px;background:white;padding:10px;border-radius:18px;border:1.5px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,.08);justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;}}
+.ctab{{font-family:'Outfit',sans-serif;font-size:1rem;font-weight:700;color:#1e293b;border-radius:12px;padding:14px 26px;background:#f1f5f9;border:1.5px solid #cbd5e1;cursor:pointer;transition:all .2s;outline:none;}}
+.ctab:hover{{background:#e2e8f0;border-color:#94a3b8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}}
+.ctab-active{{background:#1e293b!important;color:white!important;border-color:#1e293b!important;box-shadow:0 6px 20px rgba(30,41,59,.25);transform:translateY(-1px);}}
+</style>
+<div class="ctab-bar">{tab_btns_html}</div>
+<script>
+function setTab(key) {{
+  var inputs = window.parent.document.querySelectorAll('input[type=text]');
+  // Use Streamlit's event system via a hidden input trick
+  var event = new CustomEvent('streamlit:setTab', {{detail: key}});
+  window.parent.document.dispatchEvent(event);
+}}
+</script>
+""", unsafe_allow_html=True)
+
+# Hidden tab selector buttons (one per tab, used for state change)
+tab_cols = st.columns(len(tab_defs))
+for i, (label, key) in enumerate(tab_defs):
+    with tab_cols[i]:
+        if st.button(label, key=f"tab_btn_{key}", use_container_width=True):
+            st.session_state.current_tab = key
+            if key != "chat":
+                if "agent_results" not in st.session_state:
+                    pass
+            st.rerun()
+
 st.markdown("""<style>
-div[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
+div[data-testid="stHorizontalBlock"] > div [data-testid="stButton"] button {
+    background: #f1f5f9!important;
+    color: #1e293b!important;
+    border: 1.5px solid #cbd5e1!important;
     border-radius: 12px!important;
     font-size: 1rem!important;
     font-weight: 700!important;
     padding: 14px 20px!important;
     width: 100%!important;
-    font-family: 'Outfit', sans-serif!important;
-    transition: all .2s ease!important;
-}
-div[data-testid="stHorizontalBlock"] button[kind="secondary"],
-div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"] {
-    background: #f1f5f9!important;
-    border: 1.5px solid #cbd5e1!important;
     box-shadow: none!important;
+    font-family: 'Outfit', sans-serif!important;
 }
-div[data-testid="stHorizontalBlock"] button[kind="secondary"] *,
-div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"] * {
-    color: #1e293b!important;
-}
-div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover,
-div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"]:hover {
+div[data-testid="stHorizontalBlock"] > div [data-testid="stButton"] button:hover {
     background: #e2e8f0!important;
     border-color: #94a3b8!important;
-    transform: translateY(-1px);
-}
-div[data-testid="stHorizontalBlock"] button[kind="primary"],
-div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] {
-    background: #1e293b!important;
-    border: 1.5px solid #1e293b!important;
-    box-shadow: 0 6px 20px rgba(30,41,59,.25)!important;
-}
-div[data-testid="stHorizontalBlock"] button[kind="primary"] *,
-div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] * {
-    color: #ffffff!important;
+    transform: translateY(-1px)!important;
 }
 </style>""", unsafe_allow_html=True)
-
-# Ancre juste au-dessus du contenu des onglets : apres un rerun (clic sur un onglet),
-# on scroll vers cette ancre au lieu de revenir tout en haut de la page (avant le hero).
-# Exception : sur l'onglet chat, une fois qu'il y a un echange, c'est le scroll vers le bas
-# (juste apres le champ de saisie) qui prend le relais, plus bas dans la page.
-st.markdown('<div id="tab-content-anchor"></div>', unsafe_allow_html=True)
-_skip_top_anchor = (active_key == "chat" and len(st.session_state.get("messages", [])) > 1)
-if not _skip_top_anchor:
-    components.html("""<script>
-setTimeout(function(){
-  var el = window.parent.document.getElementById('tab-content-anchor');
-  if (el) el.scrollIntoView({behavior:'instant', block:'start'});
-}, 80);
-</script>""", height=0)
-
-tab_cols = st.columns(len(tab_defs))
-for i, (label, key) in enumerate(tab_defs):
-    with tab_cols[i]:
-        if st.button(label, key=f"tab_btn_{key}", use_container_width=True,
-                     type="primary" if key == active_key else "secondary"):
-            st.session_state.current_tab = key
-            st.rerun()
 
 # Create fake tab_dict for content rendering
 class FakeTab:
@@ -654,30 +646,10 @@ if "chat" in tab_dict:
                 chat_html+=f'<div class="chat-row assistant"><div class="chat-avatar av-bot">L</div><div class="chat-bubble bubble-bot">{c}</div></div>'
             else:
                 chat_html+=f'<div class="chat-row user"><div class="chat-bubble bubble-user">{c}</div><div class="chat-avatar av-user">V</div></div>'
-        chat_html+='</div>'
+        chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
         st.markdown(chat_html,unsafe_allow_html=True)
-        with st.form("chat_form", clear_on_submit=True):
-            fc1, fc2 = st.columns([9, 1])
-            with fc1:
-                typed = st.text_input(
-                    "x",
-                    placeholder="Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?",
-                    key="chat_typed", label_visibility="collapsed"
-                )
-            with fc2:
-                sent = st.form_submit_button("↑", use_container_width=True)
-        st.markdown('<div id="chat-bottom-anchor" style="height:1px"></div>', unsafe_allow_html=True)
-        if len(st.session_state.messages) > 1:
-            components.html("""<script>
-function alScrollToChatBottom(){
-  var box = window.parent.document.getElementById('chat-box');
-  if (box) box.scrollTop = box.scrollHeight;
-  var el = window.parent.document.getElementById('chat-bottom-anchor');
-  if (el) el.scrollIntoView({behavior:'instant', block:'end'});
-}
-[80, 250, 500, 900, 1500].forEach(function(t){ setTimeout(alScrollToChatBottom, t); });
-</script>""", height=0)
-        if sent and typed:
+        typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
+        if typed:
             st.session_state.messages.append({"role":"user","content":typed})
             try: resp, metrics = ask(typed+get_config_context())
             except Exception as e: resp, metrics = f"Error: {e}", {}
@@ -702,7 +674,10 @@ if "matching" in tab_dict:
             run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
         with co:
             if run and job.strip():
-                with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
+                try:
+                    with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
+                except Exception as _e:
+                    st.error(f"Erreur API : {type(_e).__name__} — {str(_e)}")
                 try:
                     _res=st.session_state.agent_results; _m=_res.get("matching",{})
                     log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email, metrics=_res.get("metrics",{}))

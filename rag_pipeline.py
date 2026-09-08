@@ -125,13 +125,13 @@ def _get_llm_config():
         import streamlit as st
         cfg = st.session_state.get("config", {})
         return {
-            "model": cfg.get("llm_model", "claude-sonnet-4-6"),
+            "model": cfg.get("llm_model", "claude-sonnet-5"),
             "temp_chat": float(cfg.get("llm_temp_chat", "1.0")),
             "top_k": int(cfg.get("llm_top_k", "12")),
             "max_tokens_chat": int(cfg.get("llm_max_tokens_chat", "1024")),
         }
     except Exception:
-        return {"model": "claude-sonnet-4-6", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
+        return {"model": "claude-sonnet-5", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
 
 
 def _extract_text(response):

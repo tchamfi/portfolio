@@ -137,14 +137,30 @@ def _get_llm_config():
 def _extract_text(response):
     """Extract text from Anthropic response — handles all SDK versions."""
     for block in response.content:
-        if hasattr(block, "text"):
-            return block.text
-        if hasattr(block, "value"):
-            return block.value
         try:
-            return str(block)
+            d = block.model_dump()
+            if isinstance(d, dict) and d.get("text"):
+                return d["text"]
         except Exception:
-            continue
+            pass
+        try:
+            t = block.text
+            if t is not None:
+                return str(t)
+        except Exception:
+            pass
+        try:
+            d2 = block.__dict__
+            if isinstance(d2, dict) and d2.get("text"):
+                return d2["text"]
+        except Exception:
+            pass
+        try:
+            v = block.value
+            if v is not None:
+                return str(v)
+        except Exception:
+            pass
     return ""
 CLAUDE_OUTPUT_COST = 15.0 / 1_000_000  # $15 per million output tokens
 

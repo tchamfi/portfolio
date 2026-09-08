@@ -2,7 +2,7 @@
 Ask Lionel — Portfolio V2.5 (Hugging Face deployment)
 """
 
-import re, json
+import re, json, time
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
@@ -445,10 +445,10 @@ if st.session_state.admin_view:
     with at9:
         st.markdown("**Configuration du modèle IA**")
         st.caption("Ces paramètres s'appliquent immédiatement après sauvegarde — pas besoin de redéployer.")
-        model_opts = ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"]
-        cur_model = cfg.get("llm_model", "claude-sonnet-4-20250514")
+        model_opts = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+        cur_model = cfg.get("llm_model", "claude-sonnet-5")
         new_llm_model = st.selectbox("Modèle", model_opts, index=model_opts.index(cur_model) if cur_model in model_opts else 0, key="llm_model")
-        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher.")
+        st.caption("Sonnet = meilleur rapport qualité/coût. Haiku = plus rapide et moins cher. Sonnet 5 ignore/rejette le paramètre temperature (parametres d'echantillonnage retires par Anthropic) : le reglage ci-dessous n'a d'effet que sur Haiku.")
         llm1, llm2 = st.columns(2)
         with llm1:
             st.markdown("**Chat RAG**")
@@ -514,8 +514,7 @@ if cfg.get("show_metrics",True):
     st.markdown("<br>",unsafe_allow_html=True)
 
 # ============================================================
-# ============================================================
-# MAIN NAVIGATION TABS — dynamic based on visibility settings
+# MAIN NAVIGATION TABS — custom HTML implementation
 # ============================================================
 tab_defs = []
 tab_defs.append(("Profil" if lang=="fr" else "About me", "profil"))
@@ -528,18 +527,93 @@ if cfg.get("show_rdv", True):
 if cfg.get("show_recos", True):
     tab_defs.append(("Recommandations" if lang=="fr" else "Recommendations", "recos"))
 
-main_tabs = [t[0] for t in tab_defs]
-tab_keys  = [t[1] for t in tab_defs]
+tab_keys = [t[1] for t in tab_defs]
 
-created_tabs = st.tabs(main_tabs)
-tab_dict = {tab_keys[i]: created_tabs[i] for i in range(len(tab_keys))}
+# Determine active tab from session state or default
+if "current_tab" not in st.session_state:
+    st.session_state.current_tab = "profil"
+if st.session_state.current_tab not in tab_keys:
+    st.session_state.current_tab = tab_keys[0]
+
+active_key = st.session_state.current_tab
+
+# Style des onglets natifs Streamlit (primary = actif, secondary = inactif)
+# On couvre les 2 conventions possibles selon la version de Streamlit :
+# button[kind="..."] (versions plus anciennes) et [data-testid="stBaseButton-..."] (plus recentes)
+st.markdown("""<style>
+div[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
+    border-radius: 12px!important;
+    font-size: 1rem!important;
+    font-weight: 700!important;
+    padding: 14px 20px!important;
+    width: 100%!important;
+    font-family: 'Outfit', sans-serif!important;
+    transition: all .2s ease!important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"],
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"] {
+    background: #f1f5f9!important;
+    border: 1.5px solid #cbd5e1!important;
+    box-shadow: none!important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"] *,
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"] * {
+    color: #1e293b!important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover,
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-secondary"]:hover {
+    background: #e2e8f0!important;
+    border-color: #94a3b8!important;
+    transform: translateY(-1px);
+}
+div[data-testid="stHorizontalBlock"] button[kind="primary"],
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] {
+    background: #1e293b!important;
+    border: 1.5px solid #1e293b!important;
+    box-shadow: 0 6px 20px rgba(30,41,59,.25)!important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="primary"] *,
+div[data-testid="stHorizontalBlock"] button[data-testid="stBaseButton-primary"] * {
+    color: #ffffff!important;
+}
+</style>""", unsafe_allow_html=True)
+
+# Ancre juste au-dessus du contenu des onglets : apres un rerun (clic sur un onglet),
+# on scroll vers cette ancre au lieu de revenir tout en haut de la page (avant le hero).
+# Exception : sur l'onglet chat, une fois qu'il y a un echange, c'est le scroll vers le bas
+# (juste apres le champ de saisie) qui prend le relais, plus bas dans la page.
+st.markdown('<div id="tab-content-anchor"></div>', unsafe_allow_html=True)
+_skip_top_anchor = (active_key == "chat" and len(st.session_state.get("messages", [])) > 1)
+if not _skip_top_anchor:
+    components.html("""<script>
+setTimeout(function(){
+  var el = window.parent.document.getElementById('tab-content-anchor');
+  if (el) el.scrollIntoView({behavior:'instant', block:'start'});
+}, 80);
+</script>""", height=0)
+
+tab_cols = st.columns(len(tab_defs))
+for i, (label, key) in enumerate(tab_defs):
+    with tab_cols[i]:
+        if st.button(label, key=f"tab_btn_{key}", use_container_width=True,
+                     type="primary" if key == active_key else "secondary"):
+            st.session_state.current_tab = key
+            st.rerun()
+
+# Create fake tab_dict for content rendering
+class FakeTab:
+    def __init__(self, is_active): self._active = is_active
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
+
+tab_dict = {key: FakeTab(key == active_key) for _, key in tab_defs}
 
 def show_tab(key):
-    return key in tab_dict
+    return active_key == key
 
 
 # --- TAB 1 : PROFIL ---
-with tab_dict["profil"]:
+if show_tab("profil"):
     # Profil paragraphs
     if cfg.get("show_profil",True):
         pk="_en" if lang=="en" else ""
@@ -569,7 +643,7 @@ with tab_dict["profil"]:
 
 # --- TAB 2 : CHAT RAG ---
 if "chat" in tab_dict:
-    with tab_dict["chat"]:
+    if show_tab("chat"):
         st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
         chat_html='<div class="chat-box" id="chat-box">'
         for msg in st.session_state.messages:
@@ -580,10 +654,30 @@ if "chat" in tab_dict:
                 chat_html+=f'<div class="chat-row assistant"><div class="chat-avatar av-bot">L</div><div class="chat-bubble bubble-bot">{c}</div></div>'
             else:
                 chat_html+=f'<div class="chat-row user"><div class="chat-bubble bubble-user">{c}</div><div class="chat-avatar av-user">V</div></div>'
-        chat_html+='</div><script>setTimeout(function(){var b=document.getElementById("chat-box");if(b)b.scrollTop=b.scrollHeight;},150);</script>'
+        chat_html+='</div>'
         st.markdown(chat_html,unsafe_allow_html=True)
-        typed=st.chat_input("Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?")
-        if typed:
+        with st.form("chat_form", clear_on_submit=True):
+            fc1, fc2 = st.columns([9, 1])
+            with fc1:
+                typed = st.text_input(
+                    "x",
+                    placeholder="Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?",
+                    key="chat_typed", label_visibility="collapsed"
+                )
+            with fc2:
+                sent = st.form_submit_button("↑", use_container_width=True)
+        st.markdown('<div id="chat-bottom-anchor" style="height:1px"></div>', unsafe_allow_html=True)
+        if len(st.session_state.messages) > 1:
+            components.html("""<script>
+function alScrollToChatBottom(){
+  var box = window.parent.document.getElementById('chat-box');
+  if (box) box.scrollTop = box.scrollHeight;
+  var el = window.parent.document.getElementById('chat-bottom-anchor');
+  if (el) el.scrollIntoView({behavior:'instant', block:'end'});
+}
+[80, 250, 500, 900, 1500].forEach(function(t){ setTimeout(alScrollToChatBottom, t); });
+</script>""", height=0)
+        if sent and typed:
             st.session_state.messages.append({"role":"user","content":typed})
             try: resp, metrics = ask(typed+get_config_context())
             except Exception as e: resp, metrics = f"Error: {e}", {}
@@ -593,7 +687,7 @@ if "chat" in tab_dict:
 
 # --- TAB 3 : MATCHING ---
 if "matching" in tab_dict:
-    with tab_dict["matching"]:
+    if show_tab("matching"):
         if is_private: st.markdown('<span style="font-family:JetBrains Mono;font-size:.7rem;padding:4px 12px;border-radius:100px;border:1px solid rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.06)">PRIVATE</span>',unsafe_allow_html=True)
         matching_title = "Profile Matching — How compatible am I with your position?" if lang=="en" else "Matching de profil — Suis-je le bon candidat pour votre poste ?"
         matching_desc = "Copy-paste your job description below. The AI agent will analyze the requirements, compare them with my skills and experience, and generate a compatibility score with key arguments." if lang=="en" else "Copiez-collez votre fiche de poste ci-dessous. L'agent IA va analyser les exigences, les comparer avec mes compétences et mon expérience, et générer un score de compatibilité avec les arguments clés."
@@ -618,7 +712,9 @@ if "matching" in tab_dict:
                 except: pass
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")
-                if matching and not matching.get("error"):
+                if matching and matching.get("error"):
+                    st.error(f"Erreur matching : {matching.get('error')} — {matching.get('detail', matching.get('raw_matching',''))[:200]}")
+                elif matching and not matching.get("error"):
                     score=matching.get("score_global",0)
                     sc="low" if score<60 else ("mid" if score<80 else "high")
                     sc_col="#dc2626" if score<60 else ("#ca8a04" if score<80 else "#16a34a")
@@ -656,7 +752,7 @@ if "matching" in tab_dict:
 
 # --- TAB 4 : RDV ---
 if "rdv" in tab_dict:
-    with tab_dict["rdv"]:
+    if show_tab("rdv"):
         cal=cfg.get("calendly","")
         if cal:
             st.markdown(f'<div class="info-box"><div class="info-title">{"Book a discovery call" if lang=="en" else "Réservez un appel découverte"}</div><div class="info-desc">{"Pick a time slot that works for you. 30 minutes to discuss your needs and my approach." if lang=="en" else "Choisissez un créneau qui vous convient. 30 minutes pour échanger sur votre besoin et mon approche."}</div></div>',unsafe_allow_html=True)
@@ -664,7 +760,7 @@ if "rdv" in tab_dict:
 
 # --- TAB 5 : RECOMMANDATIONS ---
 if "recos" in tab_dict:
-    with tab_dict["recos"]:
+    if show_tab("recos"):
         approved=[r for r in recos if r.get("approved")]
         reco_html=""
         for r in approved:

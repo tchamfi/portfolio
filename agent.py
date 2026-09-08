@@ -30,17 +30,34 @@ def _get_llm_config():
 def _extract_text(response):
     """Extract text from Anthropic response — handles all SDK versions."""
     for block in response.content:
-        # Standard SDK: TextBlock with .text attribute
-        if hasattr(block, "text"):
-            return block.text
-        # Fallback for newer pydantic-based models
-        if hasattr(block, "value"):
-            return block.value
-        # Last resort
+        # Pydantic v2 model_dump (newer SDK versions)
         try:
-            return str(block)
+            d = block.model_dump()
+            if isinstance(d, dict) and d.get("text"):
+                return d["text"]
         except Exception:
-            continue
+            pass
+        # Direct .text attribute (standard SDK)
+        try:
+            t = block.text
+            if t is not None:
+                return str(t)
+        except Exception:
+            pass
+        # __dict__ fallback
+        try:
+            d2 = block.__dict__
+            if isinstance(d2, dict) and d2.get("text"):
+                return d2["text"]
+        except Exception:
+            pass
+        # .value fallback
+        try:
+            v = block.value
+            if v is not None:
+                return str(v)
+        except Exception:
+            pass
     return ""
 
 

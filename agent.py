@@ -19,12 +19,12 @@ def _get_llm_config():
         import streamlit as st
         cfg = st.session_state.get("config", {})
         return {
-            "model": cfg.get("llm_model", "claude-sonnet-4-20250514"),
+            "model": cfg.get("llm_model", "claude-sonnet-4-6"),
             "temp_matching": float(cfg.get("llm_temp_matching", "0.2")),
             "max_tokens_matching": int(cfg.get("llm_max_tokens_matching", "1500")),
         }
     except Exception:
-        return {"model": "claude-sonnet-4-20250514", "temp_matching": 0.2, "max_tokens_matching": 1500}
+        return {"model": "claude-sonnet-4-6", "temp_matching": 0.2, "max_tokens_matching": 1500}
 
 
 def _extract_text(response):

@@ -28,68 +28,58 @@ def _get_llm_config():
 
 
 def _extract_text(response):
-    """Extract text from Anthropic response — handles all SDK versions."""
+    """Extract text from Anthropic response — handles ThinkingBlock + all SDK versions."""
     import re as _re
     try:
         content = response.content
         if not content:
             return ""
-        block = content[0]
 
-        # 1. model_dump (Pydantic v2)
-        try:
-            d = block.model_dump()
-            if d.get("text") and isinstance(d["text"], str):
-                return d["text"]
-        except Exception:
-            pass
-
-        # 2. Direct .text
-        try:
-            t = block.text
-            if t is not None and isinstance(t, str):
-                return t
-        except Exception:
-            pass
-
-        # 3. __dict__
-        try:
-            d2 = block.__dict__
-            if d2.get("text") and isinstance(d2["text"], str):
-                return d2["text"]
-        except Exception:
-            pass
-
-        # 4. getattr loop
-        for attr in ("text", "value", "content", "_text"):
+        for block in content:
+            # Skip ThinkingBlock (Claude Sonnet 5 extended thinking)
             try:
-                v = getattr(block, attr, None)
-                if v and isinstance(v, str):
-                    return v
+                btype = getattr(block, 'type', None)
+                if btype == 'thinking':
+                    continue
             except Exception:
                 pass
-
-        # 5. Parse repr/str — handles TextBlock(type='text', text='...')
-        try:
-            s = repr(block)
-            m = _re.search(r"text='(.*?)'(?:\s*[,\)])", s, _re.DOTALL)
-            if m:
-                return m.group(1)
-            m = _re.search(r'text="(.*?)"(?:\s*[,\)])', s, _re.DOTALL)
-            if m:
-                return m.group(1)
-            # broader: anything between text= and end
-            m = _re.search(r"text=(['\"])(.*?)\1", s, _re.DOTALL)
-            if m:
-                return m.group(2)
-        except Exception:
-            pass
-
-        # 6. Return repr so we can debug
-        return f"[DEBUG_BLOCK: {repr(block)[:500]}]"
-
+            try:
+                d = block.model_dump()
+                if d.get('type') == 'thinking':
+                    continue
+                if d.get("text") and isinstance(d["text"], str):
+                    return d["text"]
+            except Exception:
+                pass
+            try:
+                t = block.text
+                if t is not None and isinstance(t, str):
+                    return t
+            except Exception:
+                pass
+            try:
+                d2 = block.__dict__
+                if d2.get("text") and isinstance(d2["text"], str):
+                    return d2["text"]
+            except Exception:
+                pass
+            for attr in ("text", "value", "content", "_text"):
+                try:
+                    v = getattr(block, attr, None)
+                    if v and isinstance(v, str):
+                        return v
+                except Exception:
+                    pass
+            try:
+                s = repr(block)
+                m = _re.search(r"text=(['\"])(.*?)\1", s, _re.DOTALL)
+                if m:
+                    return m.group(2)
+            except Exception:
+                pass
+        return ""
     except Exception as ex:
-        return f"[DEBUG_ERR: {ex}]"
+        return f"[ERR: {ex}]"
 
 
 def _parse_json(text):

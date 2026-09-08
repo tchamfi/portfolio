@@ -79,6 +79,9 @@ def _parse_json(text):
         except json.JSONDecodeError:
             pass
     return None
+
+
+def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
     response, metrics = _timed_call(client,

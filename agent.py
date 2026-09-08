@@ -30,11 +30,17 @@ def analyze_job_posting(job_text):
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
 
 RÈGLE DE STABILITÉ — IMPORTANTE :
-Pour competences_requises, competences_methodologiques et points_cles, reprends les termes
-EXACTS utilisés dans la fiche de poste (mêmes mots, même casse, pas de synonyme, pas de
-traduction, pas de reformulation, pas de regroupement de plusieurs termes en un seul). Le
-but est que la même fiche produise toujours la même extraction, pour que la recherche qui
-suit dans le profil retombe systématiquement sur les mêmes résultats.
+Pour competences_requises, competences_methodologiques, competences_optionnelles et points_cles,
+reprends les termes EXACTS utilisés dans la fiche de poste (mêmes mots, même casse, pas de
+synonyme, pas de traduction, pas de reformulation, pas de regroupement de plusieurs termes en un
+seul). Le but est que la même fiche produise toujours la même extraction, pour que la recherche
+qui suit dans le profil retombe systématiquement sur les mêmes résultats.
+
+RÈGLE SUR competences_optionnelles — IMPORTANTE :
+Si la fiche contient une section clairement marquée comme optionnelle ("Optional Skills", "Nice
+to have", "Apprécié", "Un plus", "Souhaité", etc.), liste ICI les compétences de cette section,
+et NULLE PART AILLEURS (ne les remets pas dans competences_requises). Si la fiche ne distingue
+pas explicitement de section optionnelle, laisse ce champ vide — ne devine pas.
 
 {
     "titre": "titre du poste",
@@ -42,6 +48,7 @@ suit dans le profil retombe systématiquement sur les mêmes résultats.
     "contexte": "résumé en 2 phrases",
     "competences_requises": ["liste", "techniques"],
     "competences_methodologiques": ["Scrum", "SAFe"],
+    "competences_optionnelles": ["compétences listées dans une section explicitement optionnelle, sinon []"],
     "experience_demandee": "X ans en Y",
     "points_cles": ["3-5 exigences importantes"],
     "secteur": "secteur",
@@ -125,10 +132,35 @@ Réponds au format JSON strict, SANS le champ score_global (il est calculé aill
     text = text.strip().replace("```json", "").replace("```", "").strip()
     try:
         matching = json.loads(text)
+        matching = _enforce_explicit_optional(matching, job_analysis)
         matching["score_global"] = _compute_score(matching, job_analysis)
         return matching, metrics
     except json.JSONDecodeError:
         return {"raw_matching": text, "error": "JSON parse failed"}, metrics
+
+
+def _enforce_explicit_optional(matching, job_analysis):
+    """Filet de securite deterministe : si l'offre marque explicitement une
+    section optionnelle (competences_optionnelles, extrait par
+    analyze_job_posting), tout gap qui y correspond est force en
+    gaps_apprecies, meme si le modele l'avait classe en gaps_imperatifs. Une
+    section marquee 'Optional' dans l'offre ne doit jamais dependre de la
+    memoire du modele plusieurs etapes de raisonnement plus loin."""
+    optional = job_analysis.get("competences_optionnelles", []) if job_analysis else []
+    if not optional:
+        return matching
+    optional_lower = [o.strip().lower() for o in optional if o and o.strip()]
+
+    def is_optional(item):
+        item_l = (item or "").strip().lower()
+        return any(o in item_l or item_l in o for o in optional_lower)
+
+    imp = matching.get("gaps_imperatifs", []) or []
+    misclassified = [g for g in imp if is_optional(g)]
+    if misclassified:
+        matching["gaps_imperatifs"] = [g for g in imp if g not in misclassified]
+        matching["gaps_apprecies"] = (matching.get("gaps_apprecies", []) or []) + misclassified
+    return matching
 
 
 def _compute_score(matching, job_analysis=None):
@@ -199,7 +231,7 @@ def run_agent(job_text, response_type="email"):
     results["job_analysis"] = job_analysis
 
     queries = []
-    for k in ["competences_requises", "competences_methodologiques"]:
+    for k in ["competences_requises", "competences_methodologiques", "competences_optionnelles"]:
         v = job_analysis.get(k, [])
         if v: queries.append(" ".join(v[:5]))
     for p in job_analysis.get("points_cles", [])[:3]:

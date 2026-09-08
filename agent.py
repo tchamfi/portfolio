@@ -61,7 +61,24 @@ def _extract_text(response):
     return ""
 
 
-def analyze_job_posting(job_text):
+def _parse_json(text):
+    """Extract and parse JSON from a response that may contain surrounding text."""
+    import re
+    # Clean backticks
+    text = text.strip().replace("```json", "").replace("```", "").strip()
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Extract first { ... } block (handles text before/after JSON)
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return None
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
     response, metrics = _timed_call(client,
@@ -81,11 +98,10 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
 }""",
         messages=[{"role": "user", "content": f"Analyse cette fiche de poste :\n\n{job_text}"}],
     )
-    text = _extract_text(response).strip().replace("```json", "").replace("```", "").strip()
-    try:
-        return json.loads(text), metrics
-    except json.JSONDecodeError:
-        return {"raw_analysis": text, "error": "JSON parse failed"}, metrics
+    parsed = _parse_json(_extract_text(response))
+    if parsed:
+        return parsed, metrics
+    return {"raw_analysis": _extract_text(response), "error": "JSON parse failed"}, metrics
 
 
 def query_rag_profile(queries):
@@ -132,11 +148,10 @@ Réponds au format JSON strict :
 }""",
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
     )
-    text = _extract_text(response).strip().replace("```json", "").replace("```", "").strip()
-    try:
-        return json.loads(text), metrics
-    except json.JSONDecodeError:
-        return {"raw_matching": text, "error": "JSON parse failed"}, metrics
+    parsed = _parse_json(_extract_text(response))
+    if parsed:
+        return parsed, metrics
+    return {"raw_matching": _extract_text(response), "error": "JSON parse failed"}, metrics
 
 
 def draft_response(job_analysis, matching, response_type="email"):

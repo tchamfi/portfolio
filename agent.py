@@ -74,26 +74,21 @@ RÈGLES D'ÉVALUATION DES COMPÉTENCES :
 - Un candidat senior qui maîtrise un outil équivalent à celui demandé doit être crédité, pas pénalisé.
 - Les compétences méthodologiques (Scrum, pilotage, backlog, roadmap, KPIs) sont hautement transférables entre domaines.
 
-CALCUL DU SCORE — MÉTHODE MÉCANIQUE, À SUIVRE DANS CET ORDRE :
-Le score n'est jamais une impression globale, c'est le résultat d'un calcul. Applique exactement
-ces étapes, dans cet ordre, sans raccourci :
-1. Dresse la liste complète des entrées de competences_requises et competences_methodologiques
-   de la fiche (chaque entrée comptée une seule fois, sans doublon).
-2. Pour chaque entrée, détermine si le profil la couvre — directement ou via une compétence
-   réellement transférable (voir règles ci-dessus) — ou si elle est absente.
-3. Chaque entrée absente est classée gaps_imperatifs ou gaps_apprecies selon les critères de
-   la section suivante.
-4. Calcule : score = 100 − (nombre de gaps_imperatifs × 15) − (nombre de gaps_apprecies × 5).
-5. Si le résultat est inférieur à 15, remonte-le à 15. Si le résultat dépasse 100, ramène-le à 100.
-6. N'ajuste jamais ce chiffre par une impression générale ("le profil semble solide donc +5") :
-   le résultat de l'étape 4-5 EST le score final, arrondi à l'entier le plus proche.
-Cette méthode remplace tout jugement libre sur le score : deux passages sur la même fiche avec
-la même liste de gaps doivent toujours produire exactement le même score.
+TON RÔLE ICI SE LIMITE À CLASSER, PAS À NOTER :
+Tu ne calcules PAS de score toi-même — un score calculé par un modèle de langage n'est pas fiable
+pour de l'arithmétique. Ton seul travail est de dresser la liste complète des entrées de
+competences_requises et competences_methodologiques de la fiche (chaque entrée comptée une seule
+fois, sans doublon), et pour chacune, de déterminer si le profil la couvre (directement ou via une
+compétence réellement transférable), ou si elle est absente. Chaque entrée absente est ensuite
+classée gaps_imperatifs ou gaps_apprecies selon les critères ci-dessous. Le score final sera
+calculé automatiquement par l'application à partir de ta classification — n'inclus pas de champ
+score_global dans ta réponse.
 
 ANALYSE DES GAPS — TRÈS IMPORTANT :
 - gaps_imperatifs : compétences ABSENTES du profil qui sont réellement centrales pour le poste. Ce sont des bloquants.
 - gaps_apprecies : compétences ABSENTES du profil qui sont secondaires ou complémentaires pour le poste. Ce sont des nice-to-have.
 - Ne te limite pas à repérer des mots-clés comme "requis" ou "apprécié". Juge l'importance réelle de chaque compétence absente à partir du contexte : est-elle dans une section clé de l'offre (titre, résumé, premières lignes) ou noyée dans une longue liste secondaire ? revient-elle plusieurs fois ? est-elle formulée avec une intensité forte ("maîtrise", "expert", "indispensable") ou mentionnée en passant ? une offre peut exiger une compétence sans utiliser un mot comme "requis", et à l'inverse citer une compétence secondaire avec un vocabulaire qui semble strict.
+- Si l'offre distingue explicitement une section "requis"/"required" d'une section "apprécié"/"optional"/"nice to have", respecte cette distinction en priorité.
 - En cas de doute réel sur l'importance d'une compétence, classe-la plutôt en gaps_apprecies : le bénéfice du doute va au candidat, pas à l'exclusion automatique.
 - Cette classification doit elle-même être stable : pour la même fiche et le même profil, une compétence donnée doit toujours atterrir dans la même catégorie (gap_imperatif ou gap_apprecie), pas tantôt l'une tantôt l'autre.
 
@@ -106,9 +101,8 @@ POINTS D'ATTENTION — TON SOUPLE ET CONSTRUCTIF :
 - Le ton doit rester factuel et honnête, jamais alarmiste. L'objectif est d'aider le lecteur à relativiser un manque, pas de le minimiser artificiellement ni d'inventer une expérience qui n'existe pas.
 - Exemple de formulation attendue : "Pas d'expérience directe sur [X], mais une pratique récente de [Y proche] et une capacité de montée en compétence déjà démontrée sur [Z] rendent cet écart facilement comblable."
 
-Réponds au format JSON strict :
+Réponds au format JSON strict, SANS le champ score_global (il est calculé ailleurs) :
 {
-    "score_global": 85,
     "points_forts": ["liste de 4-5 points forts valorisants"],
     "points_attention": ["liste de 2-3 points d'attention souples : ce qui manque, l'expérience la plus proche dans le profil, et pourquoi ce n'est pas un souci en soi"],
     "gaps_imperatifs": ["compétences absentes réellement centrales pour le poste"],
@@ -123,9 +117,22 @@ Réponds au format JSON strict :
     )
     text = text.strip().replace("```json", "").replace("```", "").strip()
     try:
-        return json.loads(text), metrics
+        matching = json.loads(text)
+        matching["score_global"] = _compute_score(matching)
+        return matching, metrics
     except json.JSONDecodeError:
         return {"raw_matching": text, "error": "JSON parse failed"}, metrics
+
+
+def _compute_score(matching):
+    """Calcule le score de matching de facon deterministe en Python, a partir
+    du nombre de gaps que le modele a classes — jamais via un score que le
+    modele calculerait et rapporterait lui-meme (peu fiable pour de
+    l'arithmetique, verifie empiriquement sur des cas reels)."""
+    n_imperatifs = len(matching.get("gaps_imperatifs", []) or [])
+    n_apprecies = len(matching.get("gaps_apprecies", []) or [])
+    score = 100 - (n_imperatifs * 15) - (n_apprecies * 5)
+    return max(15, min(100, score))
 
 
 def draft_response(job_analysis, matching, response_type="email"):

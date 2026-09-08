@@ -459,12 +459,21 @@ if st.session_state.admin_view:
             st.markdown("**Matching / Agent**")
             new_llm_temp_match = st.slider("Température matching", 0.0, 2.0, float(cfg.get("llm_temp_matching", "0.2")), 0.1, key="llm_tm", help="0.2 = stable avec nuance. 0 = identique à chaque fois")
             new_llm_max_match = st.number_input("Max tokens matching", 512, 4096, int(cfg.get("llm_max_tokens_matching", "1500")), 128, key="llm_mm", help="Longueur max de l'email/pitch généré")
+            severity_opts = ["stricte", "equilibree", "souple"]
+            severity_labels = {"stricte": "Stricte", "equilibree": "Équilibrée (recommandé)", "souple": "Souple"}
+            cur_severity = cfg.get("llm_matching_severity", "equilibree")
+            new_llm_severity = st.selectbox(
+                "Sévérité du matching", severity_opts,
+                index=severity_opts.index(cur_severity) if cur_severity in severity_opts else 1,
+                format_func=lambda k: severity_labels[k], key="llm_sev",
+                help="Stricte = toute compétence absente non explicitement marquée optionnelle est bloquante. Équilibrée = le modèle juge l'importance selon le contexte de l'offre. Souple = bénéfice du doute en faveur du candidat."
+            )
         st.markdown("---")
         st.markdown("**Résumé de la configuration active**")
-        st.markdown(f'<div style="background:#f8fafc;border-radius:12px;padding:16px;border:1px solid #e2e8f0;font-size:.85rem;line-height:1.8"><strong>Modèle :</strong> {new_llm_model}<br><strong>Chat :</strong> temp={new_llm_temp_chat}, max_tokens={new_llm_max_chat}, TOP_K={new_llm_top_k}<br><strong>Matching :</strong> temp={new_llm_temp_match}, max_tokens={new_llm_max_match}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background:#f8fafc;border-radius:12px;padding:16px;border:1px solid #e2e8f0;font-size:.85rem;line-height:1.8"><strong>Modèle :</strong> {new_llm_model}<br><strong>Chat :</strong> temp={new_llm_temp_chat}, max_tokens={new_llm_max_chat}, TOP_K={new_llm_top_k}<br><strong>Matching :</strong> temp={new_llm_temp_match}, max_tokens={new_llm_max_match}, sévérité={severity_labels[new_llm_severity]}</div>', unsafe_allow_html=True)
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
-        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"_record_ids":cfg.get("_record_ids",{})}
+        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"llm_matching_severity":new_llm_severity,"_record_ids":cfg.get("_record_ids",{})}
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
         st.session_state.admin_exp=new_exp; st.session_state.admin_cs=new_cs
         st.session_state.messages=[{"role":"assistant","content":WELCOME_FR}]
@@ -702,23 +711,17 @@ if "matching" in tab_dict:
             run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
         with co:
             if run and job.strip():
-                try:
-                    with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
-                except Exception as _e:
-                    st.error(f"Erreur API : {type(_e).__name__} — {str(_e)}")
+                with st.spinner("..."): st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
                 try:
                     _res=st.session_state.agent_results; _m=_res.get("matching",{})
                     log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email, metrics=_res.get("metrics",{}))
                 except: pass
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")
-                if matching and matching.get("error"):
-                    st.error(f"Erreur matching : {matching.get('error')}")
-                    st.code(matching.get('detail', matching.get('raw_matching',''))[:1000])
-                elif matching and not matching.get("error"):
+                if matching and not matching.get("error"):
                     score=matching.get("score_global",0)
-                    sc="low" if score<60 else ("mid" if score<80 else "high")
-                    sc_col="#dc2626" if score<60 else ("#ca8a04" if score<80 else "#16a34a")
+                    sc="low" if score<50 else ("mid" if score<70 else ("good" if score<=90 else "high"))
+                    sc_col="#c2666a" if score<50 else ("#c2842a" if score<70 else ("#4ade80" if score<=90 else "#15803d"))
                     # Circular score
                     st.markdown(f'<div style="text-align:center;padding:1.5rem 0"><div style="display:inline-flex;align-items:center;justify-content:center;width:120px;height:120px;border-radius:50%;background:conic-gradient({sc_col} 0% {score}%, #e2e8f0 {score}% 100%);position:relative"><div style="width:96px;height:96px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;flex-direction:column"><div style="font-size:2.2rem;font-weight:900;color:{sc_col}">{score}</div><div style="font-size:.7rem;color:#94a3b8">/100</div></div></div></div>', unsafe_allow_html=True)
                     # Points forts — always visible
@@ -726,22 +729,38 @@ if "matching" in tab_dict:
                         st.markdown('<div class="gap-section-title" style="color:#16a34a">Points forts</div>', unsafe_allow_html=True)
                         for p in matching.get("points_forts",[]):
                             st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
-                    # Gaps — visible to public only if score < 60, always visible to admin
-                    show_gaps = is_private or score < 60
+                    # Visibilite publique par palier :
+                    # < 50   -> gaps_imperatifs (bloquants)
+                    # 50-69  -> points_attention + gaps_apprecies (bon match, reserves visibles)
+                    # 70-90  -> points_attention seul (bon match, juste une nuance)
+                    # > 90   -> rien de plus (points_forts deja affiches ci-dessus)
+                    # L'admin voit toujours tout, quel que soit le score.
+                    show_gaps_imp_public = score < 50
+                    show_gaps_app_public = (not is_private) and 50 <= score < 70
+                    show_attention_public = (not is_private) and 50 <= score <= 90
+                    show_gaps = is_private or show_gaps_imp_public
                     if show_gaps:
                         gaps_imp = matching.get("gaps_imperatifs", [])
                         gaps_app = matching.get("gaps_apprecies", [])
-                        if gaps_imp:
-                            st.markdown('<div class="gap-section-title" style="color:#dc2626">Compétences manquantes (requises)</div>', unsafe_allow_html=True)
+                        if gaps_imp and (is_private or show_gaps_imp_public):
+                            st.markdown('<div class="gap-section-title" style="color:#c2666a">Compétences manquantes (requises)</div>', unsafe_allow_html=True)
                             for g in gaps_imp:
                                 st.markdown(f'<div class="pt-gap-red">{g}</div>', unsafe_allow_html=True)
-                        if gaps_app:
+                        if gaps_app and (is_private or show_gaps_imp_public):
                             st.markdown('<div class="gap-section-title" style="color:#d97706">Compétences manquantes (appréciées)</div>', unsafe_allow_html=True)
                             for g in gaps_app:
                                 st.markdown(f'<div class="pt-gap-orange">{g}</div>', unsafe_allow_html=True)
-                        if score < 60 and not is_private:
+                        if score < 50 and not is_private:
                             msg_honesty = "This role requires skills I haven't developed yet, but here's what I bring to the table." if lang=="en" else "Ce poste nécessite des compétences que je n'ai pas encore développées, mais voici ce que j'apporte."
                             st.markdown(f'<div style="background:rgba(99,102,241,.04);border-radius:12px;padding:12px 16px;margin-top:12px;font-size:.85rem;color:#64748b;font-style:italic">{msg_honesty}</div>', unsafe_allow_html=True)
+                    if show_gaps_app_public and matching.get("gaps_apprecies"):
+                        st.markdown('<div class="gap-section-title" style="color:#d97706">Compétences manquantes (appréciées)</div>', unsafe_allow_html=True)
+                        for g in matching.get("gaps_apprecies", []):
+                            st.markdown(f'<div class="pt-gap-orange">{g}</div>', unsafe_allow_html=True)
+                    if show_attention_public and matching.get("points_attention"):
+                        st.markdown('<div class="gap-section-title" style="color:#d97706">Points d\'attention</div>', unsafe_allow_html=True)
+                        for p in matching.get("points_attention",[]):
+                            st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
                     # Admin extras
                     if is_private:
                         if matching.get("points_attention"):

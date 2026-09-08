@@ -167,7 +167,7 @@ CSS = """
     .score-sub{font-size:.85rem;color:#94a3b8!important;}
     .pt-fort{background:rgba(34,197,94,.04);border-left:3px solid #22c55e;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
     .pt-att{background:rgba(234,179,8,.04);border-left:3px solid #eab308;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
-    .pt-gap-red{background:rgba(220,38,38,.04);border-left:3px solid #dc2626;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
+    .pt-gap-red{background:rgba(194,102,106,.06);border-left:3px solid #c2666a;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
     .pt-gap-orange{background:rgba(217,119,6,.04);border-left:3px solid #d97706;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
     .gap-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 .5rem;}
 

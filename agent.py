@@ -1,3 +1,8 @@
+"""
+agent.py — Portfolio matching agent
+Uses search_chunks() from rag_pipeline (TF-IDF based)
+"""
+
 import os, json
 from anthropic import Anthropic
 from rag_pipeline import search_chunks
@@ -21,91 +26,16 @@ def _get_llm_config():
         return {
             "model": cfg.get("llm_model", "claude-sonnet-5"),
             "temp_matching": float(cfg.get("llm_temp_matching", "0.2")),
-            "max_tokens_matching": int(cfg.get("llm_max_tokens_matching", "3000")),
+            "max_tokens_matching": int(cfg.get("llm_max_tokens_matching", "1500")),
         }
     except Exception:
-        return {"model": "claude-sonnet-5", "temp_matching": 0.2, "max_tokens_matching": 3000}
-
-
-def _extract_text(response):
-    """Extract text from Anthropic response — handles ThinkingBlock + all SDK versions."""
-    import re as _re
-    try:
-        content = response.content
-        if not content:
-            return ""
-
-        for block in content:
-            # Skip ThinkingBlock (Claude Sonnet 5 extended thinking)
-            try:
-                btype = getattr(block, 'type', None)
-                if btype == 'thinking':
-                    continue
-            except Exception:
-                pass
-            try:
-                d = block.model_dump()
-                if d.get('type') == 'thinking':
-                    continue
-                if d.get("text") and isinstance(d["text"], str):
-                    return d["text"]
-            except Exception:
-                pass
-            try:
-                t = block.text
-                if t is not None and isinstance(t, str):
-                    return t
-            except Exception:
-                pass
-            try:
-                d2 = block.__dict__
-                if d2.get("text") and isinstance(d2["text"], str):
-                    return d2["text"]
-            except Exception:
-                pass
-            for attr in ("text", "value", "content", "_text"):
-                try:
-                    v = getattr(block, attr, None)
-                    if v and isinstance(v, str):
-                        return v
-                except Exception:
-                    pass
-            try:
-                s = repr(block)
-                m = _re.search(r"text=(['\"])(.*?)\1", s, _re.DOTALL)
-                if m:
-                    return m.group(2)
-            except Exception:
-                pass
-        return ""
-    except Exception as ex:
-        return f"[ERR: {ex}]"
-
-
-def _parse_json(text):
-    """Extract and parse JSON from a response that may contain surrounding text."""
-    import re
-    # Clean backticks
-    text = text.strip().replace("```json", "").replace("```", "").strip()
-    # Try direct parse first
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    # Extract first { ... } block (handles text before/after JSON)
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-    return None
+        return {"model": "claude-sonnet-5", "temp_matching": 0.2, "max_tokens_matching": 1500}
 
 
 def analyze_job_posting(job_text):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    response, metrics = _timed_call(client,
+    kwargs = dict(
         model=llm["model"], max_tokens=1024, temperature=llm["temp_matching"],
         system="""Tu es un expert en analyse de fiches de poste IT.
 Extrais les informations clés au format JSON strict (pas de markdown, pas de backticks).
@@ -122,10 +52,12 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
 }""",
         messages=[{"role": "user", "content": f"Analyse cette fiche de poste :\n\n{job_text}"}],
     )
-    parsed = _parse_json(_extract_text(response))
-    if parsed:
-        return parsed, metrics
-    return {"raw_analysis": _extract_text(response), "error": "JSON parse failed"}, metrics
+    response, metrics = _timed_call(client, **kwargs)
+    text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(text), metrics
+    except json.JSONDecodeError:
+        return {"raw_analysis": text, "error": "JSON parse failed"}, metrics
 
 
 def query_rag_profile(queries):
@@ -135,9 +67,7 @@ def query_rag_profile(queries):
 def compute_matching(job_analysis, profile_context):
     client = Anthropic(api_key=_get_api_key())
     llm = _get_llm_config()
-    response, metrics = _timed_call(client,
-        model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
-        system="""Tu es un expert en recrutement IT et en matching de profils senior.
+    system_prompt = """Tu es un expert en recrutement IT et en matching de profils senior.
 Tu évalues la compatibilité entre un candidat et une offre avec une approche COMMERCIALE et RÉALISTE.
 
 RÈGLES DE SCORING :
@@ -147,6 +77,7 @@ RÈGLES DE SCORING :
 - Les compétences méthodologiques (Scrum, pilotage, backlog, roadmap, KPIs) sont hautement transférables entre domaines.
 - Le score doit refléter la capacité RÉELLE du candidat à réussir dans le poste, pas un matching mot-à-mot.
 - Un profil qui coche 80% des critères avec des compétences transférables sur les 20% restants mérite 80-85, pas 60-70.
+- Sois précis et cohérent : pour une même fiche de poste, ton évaluation doit rester stable, pas dispersée.
 
 ÉCHELLE :
 - 90-100 : Match quasi parfait, expérience directe sur tous les points
@@ -156,26 +87,32 @@ RÈGLES DE SCORING :
 - <60 : Profil éloigné
 
 ANALYSE DES GAPS — TRÈS IMPORTANT :
-- gaps_imperatifs : compétences ABSENTES du profil qui sont marquées comme "requis", "impératif", "obligatoire", "indispensable", "X ans minimum", "maîtrise exigée" dans l'offre. Ce sont des bloquants.
-- gaps_apprecies : compétences ABSENTES du profil qui sont marquées comme "apprécié", "un plus", "idéalement", "souhaité", "serait un atout", "connaissance souhaitée" dans l'offre. Ce sont des nice-to-have.
-- Si une compétence n'est pas explicitement marquée comme optionnelle dans l'offre, considère-la comme impérative par défaut.
+- gaps_imperatifs : compétences ABSENTES du profil qui sont réellement centrales pour le poste. Ce sont des bloquants.
+- gaps_apprecies : compétences ABSENTES du profil qui sont secondaires ou complémentaires pour le poste. Ce sont des nice-to-have.
+- Ne te limite pas à repérer des mots-clés comme "requis" ou "apprécié". Juge l'importance réelle de chaque compétence absente à partir du contexte : est-elle dans une section clé de l'offre (titre, résumé, premières lignes) ou noyée dans une longue liste secondaire ? revient-elle plusieurs fois ? est-elle formulée avec une intensité forte ("maîtrise", "expert", "indispensable") ou mentionnée en passant ? une offre peut exiger une compétence sans utiliser un mot comme "requis", et à l'inverse citer une compétence secondaire avec un vocabulaire qui semble strict.
+- En cas de doute réel sur l'importance d'une compétence, classe-la plutôt en gaps_apprecies : le bénéfice du doute va au candidat, pas à l'exclusion automatique.
 
 Réponds au format JSON strict :
 {
     "score_global": 85,
     "points_forts": ["liste de 4-5 points forts valorisants"],
     "points_attention": ["liste de 2-3 points d'attention honnêtes mais constructifs"],
-    "gaps_imperatifs": ["compétences absentes marquées comme requises/obligatoires dans l'offre"],
-    "gaps_apprecies": ["compétences absentes marquées comme appréciées/optionnelles dans l'offre"],
+    "gaps_imperatifs": ["compétences absentes réellement centrales pour le poste"],
+    "gaps_apprecies": ["compétences absentes secondaires ou complémentaires pour le poste"],
     "arguments_cles": ["3 arguments convaincants pour un recruteur"],
     "conseil_approche": "conseil stratégique pour aborder le poste"
-}""",
+}"""
+    kwargs = dict(
+        model=llm["model"], max_tokens=llm["max_tokens_matching"], temperature=llm["temp_matching"],
+        system=system_prompt,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
     )
-    parsed = _parse_json(_extract_text(response))
-    if parsed:
-        return parsed, metrics
-    return {"raw_matching": _extract_text(response), "error": "JSON parse failed"}, metrics
+    response, metrics = _timed_call(client, **kwargs)
+    text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(text), metrics
+    except json.JSONDecodeError:
+        return {"raw_matching": text, "error": "JSON parse failed"}, metrics
 
 
 def draft_response(job_analysis, matching, response_type="email"):
@@ -195,26 +132,29 @@ RÈGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes à puc
         model=llm["model"], max_tokens=llm["max_tokens_matching"], system=instruction,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"}],
     )
-    return _extract_text(response), metrics
+    return response.content[0].text, metrics
 
 
 def _timed_call(client, **kwargs):
-    """Wrapper to capture tokens and latency on any Claude call."""
+    """Wrapper to capture tokens and latency on any Claude call. Retries without
+    'temperature' if the installed SDK / model rejects it (Sonnet 5 and later no
+    longer support sampling params, and requirements.txt pins anthropic>=0.45.0
+    without an upper bound, so this can change under us on redeploy)."""
     import time
     COST_IN = 3.0 / 1_000_000
     COST_OUT = 15.0 / 1_000_000
-    # Ensure numeric types are correct
-    if "temperature" in kwargs:
-        kwargs["temperature"] = float(kwargs["temperature"])
-    if "max_tokens" in kwargs:
-        kwargs["max_tokens"] = int(kwargs["max_tokens"])
     t0 = time.time()
     try:
         response = client.messages.create(**kwargs)
     except TypeError as e:
-        if "temperature" in str(e):
-            # Newer SDK / model doesn't accept temperature — retry without it
-            kwargs.pop("temperature", None)
+        if "temperature" in str(e) and "temperature" in kwargs:
+            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
+            response = client.messages.create(**kwargs)
+        else:
+            raise
+    except Exception as e:
+        if "temperature" in str(e).lower() and "temperature" in kwargs:
+            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
             response = client.messages.create(**kwargs)
         else:
             raise

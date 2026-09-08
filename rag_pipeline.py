@@ -13,6 +13,41 @@ from doc_loader import load_documents_as_chunks
 
 TOP_K = 12
 
+# Le SDK anthropic installe (requirements.txt: anthropic>=0.45.0, sans plafond) peut avoir
+# supprime le support de "temperature" independamment du modele demande. Plutot que de deviner
+# par nom de modele, on tente l'appel avec temperature et on retente sans si ca echoue precisement
+# sur ce parametre (que ce soit un TypeError cote SDK ou une erreur 400 cote API).
+def _create_message(client, **kwargs):
+    try:
+        return client.messages.create(**kwargs)
+    except TypeError as e:
+        if "temperature" in str(e) and "temperature" in kwargs:
+            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
+            return client.messages.create(**kwargs)
+        raise
+    except Exception as e:
+        if "temperature" in str(e).lower() and "temperature" in kwargs:
+            kwargs = {k: v for k, v in kwargs.items() if k != "temperature"}
+            return client.messages.create(**kwargs)
+        raise
+
+def _extract_text(response):
+    """Concatenate all text blocks in a Claude response, skipping any non-text
+    block (thinking, redacted_thinking, tool_use, etc.) instead of assuming
+    content[0] is text — that assumption breaks with models/modes that put a
+    non-text block first."""
+    parts = []
+    for block in getattr(response, "content", []) or []:
+        t = getattr(block, "text", None)
+        if t:
+            parts.append(t)
+    return "".join(parts)
+
+def _supports_temperature(model):
+    # Conserve pour compatibilite mais plus utilise directement : voir _create_message ci-dessus.
+    _NO_SAMPLING_PARAMS_MODELS = ("claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-fable-5", "claude-mythos-5")
+    return not any(m in (model or "") for m in _NO_SAMPLING_PARAMS_MODELS)
+
 _vectorizer = None
 _tfidf_matrix = None
 _all_chunks = None
@@ -134,44 +169,7 @@ def _get_llm_config():
         return {"model": "claude-sonnet-5", "temp_chat": 1.0, "top_k": 12, "max_tokens_chat": 1024}
 
 
-def _extract_text(response):
-    """Extract text from Anthropic response — handles ThinkingBlock + all SDK versions."""
-    import re as _re
-    try:
-        content = response.content
-        if not content:
-            return ""
-        for block in content:
-            try:
-                btype = getattr(block, 'type', None)
-                if btype == 'thinking': continue
-            except Exception: pass
-            try:
-                d = block.model_dump()
-                if d.get('type') == 'thinking': continue
-                if d.get("text") and isinstance(d["text"], str): return d["text"]
-            except Exception: pass
-            try:
-                t = block.text
-                if t is not None and isinstance(t, str): return t
-            except Exception: pass
-            try:
-                d2 = block.__dict__
-                if d2.get("text") and isinstance(d2["text"], str): return d2["text"]
-            except Exception: pass
-            for attr in ("text","value","content","_text"):
-                try:
-                    v = getattr(block, attr, None)
-                    if v and isinstance(v, str): return v
-                except Exception: pass
-            try:
-                s = repr(block)
-                m = _re.search(r"text=(['\"])(.*?)\1", s, _re.DOTALL)
-                if m: return m.group(2)
-            except Exception: pass
-        return ""
-    except Exception as ex:
-        return f"[ERR: {ex}]"
+CLAUDE_INPUT_COST = 3.0 / 1_000_000   # $3 per million input tokens
 CLAUDE_OUTPUT_COST = 15.0 / 1_000_000  # $15 per million output tokens
 
 
@@ -190,22 +188,13 @@ Règles STRICTES :
 - Sois professionnel, précis, engageant et concret. Donne des exemples réels de tes missions."""
 
     t0 = time.time()
-    try:
-        response = client.messages.create(
-            model=llm["model"], max_tokens=llm["max_tokens_chat"],
-            temperature=llm["temp_chat"],
-            system=system_prompt,
-            messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
-        )
-    except TypeError as e:
-        if "temperature" in str(e):
-            response = client.messages.create(
-                model=llm["model"], max_tokens=llm["max_tokens_chat"],
-                system=system_prompt,
-                messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
-            )
-        else:
-            raise
+    kwargs = dict(
+        model=llm["model"], max_tokens=llm["max_tokens_chat"],
+        system=system_prompt,
+        messages=[{"role": "user", "content": f"Contexte :\n{context}\n\n---\nQuestion : {question}"}],
+        temperature=llm["temp_chat"],
+    )
+    response = _create_message(client, **kwargs)
     latence_ms = int((time.time() - t0) * 1000)
     tokens_in = response.usage.input_tokens
     tokens_out = response.usage.output_tokens

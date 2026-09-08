@@ -5,7 +5,7 @@ Uses search_chunks() from rag_pipeline (TF-IDF based)
 
 import os, json
 from anthropic import Anthropic
-from rag_pipeline import search_chunks
+from rag_pipeline import search_chunks, _extract_text
 
 TOP_K = 10
 
@@ -53,7 +53,7 @@ Extrais les informations clés au format JSON strict (pas de markdown, pas de ba
         messages=[{"role": "user", "content": f"Analyse cette fiche de poste :\n\n{job_text}"}],
     )
     response, metrics = _timed_call(client, **kwargs)
-    text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    text = _extract_text(response).strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(text), metrics
     except json.JSONDecodeError:
@@ -108,7 +108,7 @@ Réponds au format JSON strict :
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nProfil :\n{profile_context}"}],
     )
     response, metrics = _timed_call(client, **kwargs)
-    text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    text = _extract_text(response).strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(text), metrics
     except json.JSONDecodeError:
@@ -132,7 +132,7 @@ RÈGLES DE FORMAT : Texte brut uniquement, pas de markdown, pas de listes à puc
         model=llm["model"], max_tokens=llm["max_tokens_matching"], system=instruction,
         messages=[{"role": "user", "content": f"Fiche :\n{json.dumps(job_analysis, ensure_ascii=False)}\n\nMatching :\n{json.dumps(matching, ensure_ascii=False)}"}],
     )
-    return response.content[0].text, metrics
+    return _extract_text(response), metrics
 
 
 def _timed_call(client, **kwargs):

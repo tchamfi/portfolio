@@ -110,6 +110,15 @@ def _call_anthropic(model, system, user_content, max_tokens, temperature):
     text = _extract_anthropic_text(response)
     tokens_in = response.usage.input_tokens
     tokens_out = response.usage.output_tokens
+    if not text.strip():
+        block_types = [type(b).__name__ for b in (getattr(response, "content", []) or [])]
+        block_types = block_types or [getattr(b, "type", "?") for b in (getattr(response, "content", []) or [])]
+        raise RuntimeError(
+            f"Reponse Anthropic sans texte exploitable — model={model}, "
+            f"stop_reason={getattr(response, 'stop_reason', '?')}, "
+            f"tokens_in={tokens_in}, tokens_out={tokens_out}, "
+            f"blocs recus={block_types or '[]'}"
+        )
     return text, tokens_in, tokens_out
 
 
@@ -166,6 +175,13 @@ def _call_openai(model, system, user_content, max_tokens, temperature):
     usage = getattr(response, "usage", None)
     tokens_in = getattr(usage, "input_tokens", 0) if usage else 0
     tokens_out = getattr(usage, "output_tokens", 0) if usage else 0
+    if not text.strip():
+        raise RuntimeError(
+            f"Reponse OpenAI sans texte exploitable — model={model}, "
+            f"status={getattr(response, 'status', '?')}, "
+            f"incomplete_details={getattr(response, 'incomplete_details', '?')}, "
+            f"tokens_in={tokens_in}, tokens_out={tokens_out}"
+        )
     return text, tokens_in, tokens_out
 
 

@@ -95,6 +95,8 @@ ANALYSE DES GAPS — TRÈS IMPORTANT :
 POINTS D'ATTENTION — TON SOUPLE ET CONSTRUCTIF :
 - Pour chaque point d'attention, cherche dans le profil l'expérience la plus proche de ce qui manque et cite-la explicitement, même si ce n'est pas un équivalent exact.
 - Explique ensuite pourquoi l'écart n'est pas réellement problématique : proximité avec un outil ou une technologie déjà maîtrisée, capacité de montée en compétence démontrée ailleurs dans le profil, nature du manque (théorique vs pratique, périphérique vs central au poste).
+- Distingue une compétence adjacente ponctuelle d'une expertise réellement profonde et durable. Si le profil montre qu'une compétence proche est pratiquée depuis longtemps ou de façon répétée sur plusieurs expériences (pas une mention isolée), présente-la comme une expertise solide et directement pertinente, pas comme "une base extensible" ou un simple point de départ. Ne minimise pas une compétence forte pour rester dans un registre uniformément prudent.
+- Ne formule jamais un point d'attention comme si tu citais une phrase prononcée par le candidat (ex. "le candidat le reconnaît lui-même"). C'est toi, l'évaluateur, qui portes le jugement à partir du profil. Reste au style évaluation neutre, jamais au style citation ou aveu.
 - Le ton doit rester factuel et honnête, jamais alarmiste. L'objectif est d'aider le lecteur à relativiser un manque, pas de le minimiser artificiellement ni d'inventer une expérience qui n'existe pas.
 - Exemple de formulation attendue : "Pas d'expérience directe sur [X], mais une pratique récente de [Y proche] et une capacité de montée en compétence déjà démontrée sur [Z] rendent cet écart facilement comblable."
 

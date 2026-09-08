@@ -92,11 +92,17 @@ ANALYSE DES GAPS — TRÈS IMPORTANT :
 - Ne te limite pas à repérer des mots-clés comme "requis" ou "apprécié". Juge l'importance réelle de chaque compétence absente à partir du contexte : est-elle dans une section clé de l'offre (titre, résumé, premières lignes) ou noyée dans une longue liste secondaire ? revient-elle plusieurs fois ? est-elle formulée avec une intensité forte ("maîtrise", "expert", "indispensable") ou mentionnée en passant ? une offre peut exiger une compétence sans utiliser un mot comme "requis", et à l'inverse citer une compétence secondaire avec un vocabulaire qui semble strict.
 - En cas de doute réel sur l'importance d'une compétence, classe-la plutôt en gaps_apprecies : le bénéfice du doute va au candidat, pas à l'exclusion automatique.
 
+POINTS D'ATTENTION — TON SOUPLE ET CONSTRUCTIF :
+- Pour chaque point d'attention, cherche dans le profil l'expérience la plus proche de ce qui manque et cite-la explicitement, même si ce n'est pas un équivalent exact.
+- Explique ensuite pourquoi l'écart n'est pas réellement problématique : proximité avec un outil ou une technologie déjà maîtrisée, capacité de montée en compétence démontrée ailleurs dans le profil, nature du manque (théorique vs pratique, périphérique vs central au poste).
+- Le ton doit rester factuel et honnête, jamais alarmiste. L'objectif est d'aider le lecteur à relativiser un manque, pas de le minimiser artificiellement ni d'inventer une expérience qui n'existe pas.
+- Exemple de formulation attendue : "Pas d'expérience directe sur [X], mais une pratique récente de [Y proche] et une capacité de montée en compétence déjà démontrée sur [Z] rendent cet écart facilement comblable."
+
 Réponds au format JSON strict :
 {
     "score_global": 85,
     "points_forts": ["liste de 4-5 points forts valorisants"],
-    "points_attention": ["liste de 2-3 points d'attention honnêtes mais constructifs"],
+    "points_attention": ["liste de 2-3 points d'attention souples : ce qui manque, l'expérience la plus proche dans le profil, et pourquoi ce n'est pas un souci en soi"],
     "gaps_imperatifs": ["compétences absentes réellement centrales pour le poste"],
     "gaps_apprecies": ["compétences absentes secondaires ou complémentaires pour le poste"],
     "arguments_cles": ["3 arguments convaincants pour un recruteur"],

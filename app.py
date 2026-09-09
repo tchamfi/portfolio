@@ -716,7 +716,7 @@ if "matching" in tab_dict:
             if run and job.strip():
                 with st.spinner("..."):
                     try:
-                        st.session_state.agent_results=run_agent(job+get_config_context(),rtype)
+                        st.session_state.agent_results=run_agent(job,rtype)
                         st.session_state.pop("agent_error", None)
                     except Exception as e:
                         st.session_state.pop("agent_results", None)

@@ -18,13 +18,20 @@ st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷"
 
 st.markdown(CSS, unsafe_allow_html=True)
 
-def _render_pagination(total_items, page_size, state_key):
-    """Affiche des controles Precedent/Suivant et retourne l'index de page
-    courant (0-based), borne a l'intervalle valide."""
+def _get_page(total_items, page_size, state_key):
+    """Retourne l'index de page courant (0-based), borne a l'intervalle valide.
+    Ne rend rien — utiliser avant la liste pour savoir quelle tranche afficher."""
     total_pages = max(1, -(-total_items // page_size))
     page = st.session_state.get(state_key, 0)
     page = max(0, min(page, total_pages - 1))
     st.session_state[state_key] = page
+    return page
+
+def _render_pagination_controls(total_items, page_size, state_key):
+    """Affiche les boutons Precedent/Suivant — a appeler APRES la liste pour
+    que les controles restent en bas, pas en haut."""
+    total_pages = max(1, -(-total_items // page_size))
+    page = st.session_state.get(state_key, 0)
     if total_pages > 1:
         pcol1, pcol2, pcol3 = st.columns([1, 2, 1])
         with pcol1:
@@ -35,7 +42,6 @@ def _render_pagination(total_items, page_size, state_key):
         with pcol3:
             if st.button("Suivant →", key=f"{state_key}_next", disabled=(page >= total_pages - 1), use_container_width=True):
                 st.session_state[state_key] = min(total_pages - 1, page + 1); st.rerun()
-    return page
 
 
 # JS injection pour styler les onglets après le rendu Streamlit
@@ -426,8 +432,8 @@ if st.session_state.admin_view:
 
                 # Matchings list
                 st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Derniers matchings</div>', unsafe_allow_html=True)
-                MATCH_PAGE_SIZE = 10
-                match_page = _render_pagination(len(matchings), MATCH_PAGE_SIZE, "admin_match_page")
+                MATCH_PAGE_SIZE = 5
+                match_page = _get_page(len(matchings), MATCH_PAGE_SIZE, "admin_match_page")
                 match_start = match_page * MATCH_PAGE_SIZE
                 for m in matchings[match_start:match_start+MATCH_PAGE_SIZE]:
                     sc = m.get("score", 0) or 0
@@ -447,12 +453,13 @@ if st.session_state.admin_view:
                     else:
                         metrics_html = ""
                     st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:{sc_bg};border-left:4px solid {sc_col};display:flex;align-items:flex-start;gap:14px"><div style="min-width:52px;text-align:center;background:white;border-radius:10px;padding:6px 0;box-shadow:0 2px 8px rgba(0,0,0,.06);flex-shrink:0"><div style="font-size:1.2rem;font-weight:900;color:{sc_col}">{sc}</div><div style="font-size:.6rem;color:#94a3b8">/100</div></div><div style="flex:1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">{poste}</div><div style="font-size:.75rem;color:#94a3b8;margin-top:2px">{date_str}</div>{em_html}{metrics_html}</div></div>', unsafe_allow_html=True)
+                _render_pagination_controls(len(matchings), MATCH_PAGE_SIZE, "admin_match_page")
 
             # Chat questions
             if chats:
                 st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:24px 0 12px">Dernières questions</div>', unsafe_allow_html=True)
-                CHAT_PAGE_SIZE = 10
-                chat_page = _render_pagination(len(chats), CHAT_PAGE_SIZE, "admin_chat_page")
+                CHAT_PAGE_SIZE = 5
+                chat_page = _get_page(len(chats), CHAT_PAGE_SIZE, "admin_chat_page")
                 chat_start = chat_page * CHAT_PAGE_SIZE
                 for c in chats[chat_start:chat_start+CHAT_PAGE_SIZE]:
                     q = c.get("question", "")[:120]
@@ -469,6 +476,7 @@ if st.session_state.admin_view:
                     else:
                         metrics_html = ""
                     st.markdown(f'<div style="padding:14px 16px;margin:6px 0;border-radius:12px;background:rgba(99,102,241,.04);border-left:4px solid #6366f1"><div style="font-weight:700;color:#1e293b;font-size:.9rem">💬 {q}</div><div style="font-size:.78rem;color:#64748b;margin-top:6px;line-height:1.4">{r}...</div><div style="font-size:.7rem;color:#94a3b8;margin-top:4px">{date_str}</div>{metrics_html}</div>', unsafe_allow_html=True)
+                _render_pagination_controls(len(chats), CHAT_PAGE_SIZE, "admin_chat_page")
         else:
             st.markdown("""<div style="text-align:center;padding:3rem 1rem">
                 <div style="font-size:3rem;margin-bottom:1rem">📊</div>

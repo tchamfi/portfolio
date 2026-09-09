@@ -19,9 +19,10 @@ def _get_llm_config():
             "model": cfg.get("llm_model", "claude-sonnet-5"),
             "temp_matching": float(cfg.get("llm_temp_matching", "0.2")),
             "max_tokens_matching": int(cfg.get("llm_max_tokens_matching", "1500")),
+            "severity": cfg.get("llm_matching_severity", "equilibree"),
         }
     except Exception:
-        return {"model": "claude-sonnet-5", "temp_matching": 0.2, "max_tokens_matching": 1500}
+        return {"model": "claude-sonnet-5", "temp_matching": 0.2, "max_tokens_matching": 1500, "severity": "equilibree"}
 
 
 def analyze_job_posting(job_text):
@@ -148,7 +149,7 @@ Réponds au format JSON strict, SANS le champ score_global (il est calculé aill
         matching = json.loads(text)
         matching = _enforce_explicit_optional(matching, job_analysis)
         matching = _check_hard_constraints(matching, job_analysis)
-        matching["score_global"] = _compute_score(matching, job_analysis)
+        matching["score_global"] = _compute_score(matching, job_analysis, llm.get("severity", "equilibree"))
         return matching, metrics
     except json.JSONDecodeError:
         return {"raw_matching": text, "error": "JSON parse failed"}, metrics
@@ -251,7 +252,20 @@ def _enforce_explicit_optional(matching, job_analysis):
     return matching
 
 
-def _compute_score(matching, job_analysis=None):
+# Trois profils de severite, pilotables depuis l'admin (Config LLM > Sévérité du
+# matching). Chaque profil definit : le budget de perte max par categorie de gap
+# (sur 100), la fourchette [plancher, plafond] du poids par gap, et le plancher
+# final du score. "equilibree" reprend les valeurs calibrees pendant la mise au
+# point initiale ; "stricte" et "souple" les resserrent ou les relachent dans
+# les memes proportions.
+_SEVERITY_PARAMS = {
+    "stricte":    {"budget_imp": 85, "budget_app": 15, "poids_imp": (12, 25), "poids_app": (4, 10), "floor": 5},
+    "equilibree": {"budget_imp": 70, "budget_app": 30, "poids_imp": (8, 18),  "poids_app": (3, 8),  "floor": 15},
+    "souple":     {"budget_imp": 55, "budget_app": 20, "poids_imp": (5, 12),  "poids_app": (2, 5),  "floor": 25},
+}
+
+
+def _compute_score(matching, job_analysis=None, severity="equilibree"):
     """Calcule le score de matching de facon deterministe en Python, a partir
     du nombre de gaps que le modele a classes — jamais via un score que le
     modele calculerait et rapporterait lui-meme (peu fiable pour de
@@ -260,7 +274,10 @@ def _compute_score(matching, job_analysis=None):
     Le poids de chaque gap est proportionnel au nombre total de competences
     listees dans l'offre (une offre courte penalise plus par gap qu'une offre
     longue), mais toujours contenu entre un plancher et un plafond fixes pour
-    ne jamais devenir absurde dans un sens ou dans l'autre."""
+    ne jamais devenir absurde dans un sens ou dans l'autre. Ces plancher/plafond,
+    ainsi que le budget de perte par categorie et le plancher final du score,
+    varient selon la severite choisie en admin."""
+    params = _SEVERITY_PARAMS.get(severity, _SEVERITY_PARAMS["equilibree"])
     n_imperatifs = len(matching.get("gaps_imperatifs", []) or [])
     n_apprecies = len(matching.get("gaps_apprecies", []) or [])
 
@@ -271,11 +288,13 @@ def _compute_score(matching, job_analysis=None):
     if total <= 0:
         total = max(n_imperatifs + n_apprecies, 1)
 
-    poids_imperatif = max(8, min(18, 70 / total))
-    poids_apprecie = max(3, min(8, 30 / total))
+    imp_min, imp_max = params["poids_imp"]
+    app_min, app_max = params["poids_app"]
+    poids_imperatif = max(imp_min, min(imp_max, params["budget_imp"] / total))
+    poids_apprecie = max(app_min, min(app_max, params["budget_app"] / total))
 
     score = 100 - (n_imperatifs * poids_imperatif) - (n_apprecies * poids_apprecie)
-    return max(15, min(100, round(score)))
+    return max(params["floor"], min(100, round(score)))
 
 
 def draft_response(job_analysis, matching, response_type="email"):

@@ -199,8 +199,15 @@ def _check_hard_constraints(matching, job_analysis):
     gaps_imp = matching.get("gaps_imperatifs", []) or []
     added = []
 
-    exp_min = job_analysis.get("experience_min_annees") if job_analysis else None
-    if isinstance(exp_min, (int, float)) and exp_min > annees_reference:
+    exp_min_raw = job_analysis.get("experience_min_annees") if job_analysis else None
+    exp_min = None
+    if isinstance(exp_min_raw, (int, float)):
+        exp_min = exp_min_raw
+    elif isinstance(exp_min_raw, str):
+        digits = "".join(ch for ch in exp_min_raw if ch.isdigit())
+        if digits:
+            exp_min = int(digits)
+    if exp_min is not None and exp_min > annees_reference:
         added.append(f"Expérience minimale de {int(exp_min)} ans demandée (profil : {annees_reference} ans)")
 
     langues_requises = (job_analysis.get("langues_requises") or []) if job_analysis else []

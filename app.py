@@ -18,6 +18,26 @@ st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷"
 
 st.markdown(CSS, unsafe_allow_html=True)
 
+def _render_pagination(total_items, page_size, state_key):
+    """Affiche des controles Precedent/Suivant et retourne l'index de page
+    courant (0-based), borne a l'intervalle valide."""
+    total_pages = max(1, -(-total_items // page_size))
+    page = st.session_state.get(state_key, 0)
+    page = max(0, min(page, total_pages - 1))
+    st.session_state[state_key] = page
+    if total_pages > 1:
+        pcol1, pcol2, pcol3 = st.columns([1, 2, 1])
+        with pcol1:
+            if st.button("← Précédent", key=f"{state_key}_prev", disabled=(page == 0), use_container_width=True):
+                st.session_state[state_key] = max(0, page - 1); st.rerun()
+        with pcol2:
+            st.markdown(f'<div style="text-align:center;color:#94a3b8;font-size:.8rem;padding-top:8px">Page {page+1} / {total_pages}</div>', unsafe_allow_html=True)
+        with pcol3:
+            if st.button("Suivant →", key=f"{state_key}_next", disabled=(page >= total_pages - 1), use_container_width=True):
+                st.session_state[state_key] = min(total_pages - 1, page + 1); st.rerun()
+    return page
+
+
 # JS injection pour styler les onglets après le rendu Streamlit
 TAB_JS = """
 <script>
@@ -147,6 +167,14 @@ if st.session_state.admin_view:
         with pc2:
             st.markdown("**English**")
             new_p1en=st.text_area("P1 EN",value=cfg.get("profil_p1_en",""),key="a_p1en",height=90); new_p2en=st.text_area("P2 EN",value=cfg.get("profil_p2_en",""),key="a_p2en",height=90); new_p3en=st.text_area("P3 EN",value=cfg.get("profil_p3_en",""),key="a_p3en",height=90); new_p4en=st.text_area("P4 EN",value=cfg.get("profil_p4_en",""),key="a_p4en",height=90)
+        st.markdown("---")
+        st.markdown("**Références pour le matching**")
+        st.caption("Utilisées par l'agent de matching pour vérifier l'expérience et les langues demandées dans une fiche de poste, indépendamment du jugement du modèle.")
+        pc3,pc4=st.columns(2)
+        with pc3:
+            new_annees_exp=st.number_input("Années d'expérience", 0, 60, int(cfg.get("annees_experience",15)), 1, key="a_annees_exp")
+        with pc4:
+            new_langues=st.text_input("Langues maîtrisées (séparées par une virgule)", value=cfg.get("langues_maitrisees","Français,Anglais"), key="a_langues")
 
     with at4:
         mc1,mc2=st.columns(2)
@@ -398,7 +426,10 @@ if st.session_state.admin_view:
 
                 # Matchings list
                 st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Derniers matchings</div>', unsafe_allow_html=True)
-                for m in matchings[:10]:
+                MATCH_PAGE_SIZE = 10
+                match_page = _render_pagination(len(matchings), MATCH_PAGE_SIZE, "admin_match_page")
+                match_start = match_page * MATCH_PAGE_SIZE
+                for m in matchings[match_start:match_start+MATCH_PAGE_SIZE]:
                     sc = m.get("score", 0) or 0
                     sc_col = "#16a34a" if sc >= 80 else ("#d97706" if sc >= 60 else "#dc2626")
                     sc_bg = "rgba(34,197,94,.08)" if sc >= 80 else ("rgba(217,119,6,.08)" if sc >= 60 else "rgba(220,38,38,.08)")
@@ -420,7 +451,10 @@ if st.session_state.admin_view:
             # Chat questions
             if chats:
                 st.markdown('<div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:24px 0 12px">Dernières questions</div>', unsafe_allow_html=True)
-                for c in chats[:15]:
+                CHAT_PAGE_SIZE = 10
+                chat_page = _render_pagination(len(chats), CHAT_PAGE_SIZE, "admin_chat_page")
+                chat_start = chat_page * CHAT_PAGE_SIZE
+                for c in chats[chat_start:chat_start+CHAT_PAGE_SIZE]:
                     q = c.get("question", "")[:120]
                     r = c.get("response", "")[:200]
                     date_str = c.get("date", "")
@@ -469,14 +503,14 @@ if st.session_state.admin_view:
                 "Sévérité du matching", severity_opts,
                 index=severity_opts.index(cur_severity) if cur_severity in severity_opts else 1,
                 format_func=lambda k: severity_labels[k], key="llm_sev",
-                help="Stricte = toute compétence absente non explicitement marquée optionnelle est bloquante. Équilibrée = le modèle juge l'importance selon le contexte de l'offre. Souple = bénéfice du doute en faveur du candidat."
+                help="Change le poids de chaque compétence manquante dans le calcul du score (pas la façon dont le modèle les classe, qui reste identique). Stricte = chaque gap pèse plus lourd, score plus sévère. Équilibrée = réglage par défaut. Souple = chaque gap pèse moins, score plus généreux."
             )
         st.markdown("---")
         st.markdown("**Résumé de la configuration active**")
         st.markdown(f'<div style="background:#f8fafc;border-radius:12px;padding:16px;border:1px solid #e2e8f0;font-size:.85rem;line-height:1.8"><strong>Modèle :</strong> {new_llm_model}<br><strong>Chat :</strong> temp={new_llm_temp_chat}, max_tokens={new_llm_max_chat}, TOP_K={new_llm_top_k}<br><strong>Matching :</strong> temp={new_llm_temp_match}, max_tokens={new_llm_max_match}, sévérité={severity_labels[new_llm_severity]}</div>', unsafe_allow_html=True)
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
-        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"llm_matching_severity":new_llm_severity,"_record_ids":cfg.get("_record_ids",{})}
+        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"llm_matching_severity":new_llm_severity,"annees_experience":new_annees_exp,"langues_maitrisees":new_langues,"_record_ids":cfg.get("_record_ids",{})}
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
         st.session_state.admin_exp=new_exp; st.session_state.admin_cs=new_cs
         st.session_state.messages=[{"role":"assistant","content":WELCOME_FR}]
@@ -712,7 +746,10 @@ if "matching" in tab_dict:
             if is_private: rtype=st.radio("Format",["email","pitch"],horizontal=True,key="rtype")
             else: rtype="email"
             run=st.button("Analyze" if lang=="en" else "Analyser",type="primary",use_container_width=True)
+            if "agent_results" in st.session_state or st.session_state.get("agent_error"):
+                st.markdown(f'<a href="#matching-result-anchor" style="display:block;text-align:center;margin-top:10px;font-size:.85rem;color:#6366f1;text-decoration:none;font-weight:600">{"See result" if lang=="en" else "Voir le résultat"} ↓</a>', unsafe_allow_html=True)
         with co:
+            st.markdown('<div id="matching-result-anchor"></div>', unsafe_allow_html=True)
             if run and job.strip():
                 with st.spinner("..."):
                     try:

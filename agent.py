@@ -197,6 +197,8 @@ def _check_hard_constraints(matching, job_analysis):
     annees_reference, langues_reference = _get_profile_constraints()
     langues_reference_norm = {_normalize_langue(l) for l in langues_reference}
     gaps_imp = matching.get("gaps_imperatifs", []) or []
+    gaps_app = matching.get("gaps_apprecies", []) or []
+    existing_text = " | ".join(gaps_imp + gaps_app).lower()
     added = []
 
     exp_min_raw = job_analysis.get("experience_min_annees") if job_analysis else None
@@ -208,12 +210,17 @@ def _check_hard_constraints(matching, job_analysis):
         if digits:
             exp_min = int(digits)
     if exp_min is not None and exp_min > annees_reference:
-        added.append(f"Expérience minimale de {int(exp_min)} ans demandée (profil : {annees_reference} ans)")
+        deja_couvert = f"{int(exp_min)} an" in existing_text or "expérience minimale" in existing_text or "années d'expérience" in existing_text
+        if not deja_couvert:
+            added.append(f"Expérience minimale de {int(exp_min)} ans demandée (profil : {annees_reference} ans)")
 
     langues_requises = (job_analysis.get("langues_requises") or []) if job_analysis else []
     for langue in langues_requises:
         if _normalize_langue(langue) not in langues_reference_norm:
-            added.append(f"Maîtrise de la langue : {langue}")
+            # Le modele a peut-etre deja liste ce meme gap de langue de lui-meme
+            # (ex: "Espagnol (langue requise...)") — on ne duplique pas.
+            if langue.strip().lower() not in existing_text:
+                added.append(f"Maîtrise de la langue : {langue}")
 
     if added:
         matching["gaps_imperatifs"] = gaps_imp + added

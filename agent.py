@@ -42,6 +42,18 @@ to have", "Apprécié", "Un plus", "Souhaité", etc.), liste ICI les compétence
 et NULLE PART AILLEURS (ne les remets pas dans competences_requises). Si la fiche ne distingue
 pas explicitement de section optionnelle, laisse ce champ vide — ne devine pas.
 
+RÈGLE SUR experience_min_annees — IMPORTANTE :
+Si la fiche indique un nombre d'années d'expérience minimum ou une fourchette ("5-10 ans",
+"5+ ans", "30 ans d'expérience"), extrais UNIQUEMENT le nombre minimum sous forme d'entier
+(ex: "5-10 ans" → 5, "5+ ans" → 5, "30 ans" → 30). Si aucune durée n'est mentionnée, mets null.
+
+RÈGLE SUR langues_requises — IMPORTANTE :
+Liste ICI uniquement les langues explicitement exigées ou mentionnées comme nécessaires dans la
+fiche (ex: "anglais courant", "espagnol", "bilingue français-anglais"), avec leur nom en français
+("Anglais", "Espagnol", etc.), sans doublon. Si aucune langue n'est explicitement mentionnée,
+laisse ce champ vide — ne devine pas, et n'invente pas une exigence de langue qui ne serait pas
+écrite noir sur blanc dans la fiche.
+
 {
     "titre": "titre du poste",
     "entreprise": "nom ou null",
@@ -50,6 +62,8 @@ pas explicitement de section optionnelle, laisse ce champ vide — ne devine pas
     "competences_methodologiques": ["Scrum", "SAFe"],
     "competences_optionnelles": ["compétences listées dans une section explicitement optionnelle, sinon []"],
     "experience_demandee": "X ans en Y",
+    "experience_min_annees": 5,
+    "langues_requises": ["langues explicitement exigées, sinon []"],
     "points_cles": ["3-5 exigences importantes"],
     "secteur": "secteur",
     "remote_possible": true/false
@@ -133,10 +147,70 @@ Réponds au format JSON strict, SANS le champ score_global (il est calculé aill
     try:
         matching = json.loads(text)
         matching = _enforce_explicit_optional(matching, job_analysis)
+        matching = _check_hard_constraints(matching, job_analysis)
         matching["score_global"] = _compute_score(matching, job_analysis)
         return matching, metrics
     except json.JSONDecodeError:
         return {"raw_matching": text, "error": "JSON parse failed"}, metrics
+
+
+def _get_profile_constraints():
+    """Annees d'experience et langues maitrisees, utilisees comme reference
+    pour les verifications d'experience/langue. Editable en admin (Config
+    Airtable), avec un fallback raisonnable si la config n'est pas chargee."""
+    try:
+        import streamlit as st
+        cfg = st.session_state.get("config", {})
+        annees = int(cfg.get("annees_experience", 15))
+        langues_raw = cfg.get("langues_maitrisees", "Français,Anglais")
+        langues = [l.strip().lower() for l in langues_raw.split(",") if l.strip()]
+        return annees, langues
+    except Exception:
+        return 15, ["français", "anglais"]
+
+
+# Variantes reconnues pour chaque langue, pour matcher "english"/"anglais"/"anglais courant" etc.
+_LANGUE_ALIASES = {
+    "français": ["français", "francais", "french"],
+    "anglais": ["anglais", "english"],
+}
+
+
+def _normalize_langue(nom):
+    """Ramene un nom de langue (quelle que soit sa graphie/langue d'ecriture)
+    a sa forme canonique francaise ('anglais', 'français'), ou le renvoie
+    normalise en minuscule si la langue n'est pas dans la table des alias
+    (donc pas une des langues maitrisees connues)."""
+    n = nom.strip().lower()
+    for canon, aliases in _LANGUE_ALIASES.items():
+        if n in aliases or any(a in n for a in aliases):
+            return canon
+    return n
+
+
+def _check_hard_constraints(matching, job_analysis):
+    """Verifications deterministes qui ne dependent d'aucun jugement du modele :
+    experience minimale demandee vs experience reelle, langues explicitement
+    exigees vs langues maitrisees. Ce sont des criteres factuels et
+    verifiables, pas des nuances d'importance — ils n'ont pas leur place dans
+    le jugement contextuel du LLM."""
+    annees_reference, langues_reference = _get_profile_constraints()
+    langues_reference_norm = {_normalize_langue(l) for l in langues_reference}
+    gaps_imp = matching.get("gaps_imperatifs", []) or []
+    added = []
+
+    exp_min = job_analysis.get("experience_min_annees") if job_analysis else None
+    if isinstance(exp_min, (int, float)) and exp_min > annees_reference:
+        added.append(f"Expérience minimale de {int(exp_min)} ans demandée (profil : {annees_reference} ans)")
+
+    langues_requises = (job_analysis.get("langues_requises") or []) if job_analysis else []
+    for langue in langues_requises:
+        if _normalize_langue(langue) not in langues_reference_norm:
+            added.append(f"Maîtrise de la langue : {langue}")
+
+    if added:
+        matching["gaps_imperatifs"] = gaps_imp + added
+    return matching
 
 
 def _enforce_explicit_optional(matching, job_analysis):

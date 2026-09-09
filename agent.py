@@ -113,6 +113,8 @@ ANALYSE DES GAPS — TRÈS IMPORTANT :
 - Si l'offre distingue explicitement une section "requis"/"required" d'une section "apprécié"/"optional"/"nice to have", respecte cette distinction en priorité.
 - En cas de doute réel sur l'importance d'une compétence, classe-la plutôt en gaps_apprecies : le bénéfice du doute va au candidat, pas à l'exclusion automatique.
 - Cette classification doit elle-même être stable : pour la même fiche et le même profil, une compétence donnée doit toujours atterrir dans la même catégorie (gap_imperatif ou gap_apprecie), pas tantôt l'une tantôt l'autre.
+- COHÉRENCE INTERNE — RÈGLE ABSOLUE : gaps_imperatifs et gaps_apprecies ne contiennent QUE des compétences réellement absentes du profil. Si en analysant une compétence tu conclus qu'elle est en fait déjà couverte, déjà maîtrisée, ou équivalente à quelque chose que le candidat pratique, NE LA METS PAS dans ces listes — même si l'offre la mentionne. Ne te contredis jamais entre le contenu d'un item de gap et son propre libellé (ex: n'écris jamais un gap suivi d'une parenthèse disant qu'il est en réalité couvert : dans ce cas, il n'appartient à aucune des deux listes).
+- Les éléments de gaps_imperatifs et gaps_apprecies sont des noms de compétences courts, sans commentaire ni parenthèse explicative. Toute nuance ou justification va exclusivement dans points_attention, jamais dans le libellé du gap lui-même.
 
 RÈGLE SPÉCIFIQUE AU PROFIL PRODUCT OWNER — À APPLIQUER AVANT DE CLASSER UNE COMPÉTENCE TECHNIQUE :
 Le candidat est Product Owner / Product Manager, pas développeur. Distingue deux natures de compétences :
@@ -147,6 +149,7 @@ Réponds au format JSON strict, SANS le champ score_global (il est calculé aill
     text = text.strip().replace("```json", "").replace("```", "").strip()
     try:
         matching = json.loads(text)
+        matching = _filter_self_contradicting_gaps(matching)
         matching = _enforce_explicit_optional(matching, job_analysis)
         matching = _check_hard_constraints(matching, job_analysis)
         matching["score_global"] = _compute_score(matching, job_analysis, llm.get("severity", "equilibree"))
@@ -225,6 +228,28 @@ def _check_hard_constraints(matching, job_analysis):
 
     if added:
         matching["gaps_imperatifs"] = gaps_imp + added
+    return matching
+
+
+# Tournures qui, quand elles apparaissent dans le libelle d'un gap, indiquent que
+# le modele s'est contredit lui-meme (il liste la competence comme manquante tout
+# en admettant dans le meme texte qu'elle est en fait couverte).
+_SELF_CONTRADICTION_MARKERS = [
+    "déjà maîtrisé", "deja maitrise", "déjà couvert", "deja couvert",
+    "couvert en réalité", "couvert en realite", "non requis", "pas un vrai",
+    "en réalité maîtrisé", "en realite maitrise",
+]
+
+
+def _filter_self_contradicting_gaps(matching):
+    """Filet de securite deterministe : si le libelle d'un gap admet lui-meme
+    (via une parenthese ou un commentaire) que la competence est en fait deja
+    couverte, on le retire des listes de gaps plutot que de compter un point
+    contre le candidat sur la base d'une contradiction du modele."""
+    for key in ("gaps_imperatifs", "gaps_apprecies"):
+        items = matching.get(key, []) or []
+        cleaned = [g for g in items if not any(m in g.lower() for m in _SELF_CONTRADICTION_MARKERS)]
+        matching[key] = cleaned
     return matching
 
 

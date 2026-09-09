@@ -789,6 +789,8 @@ if "matching" in tab_dict:
                             for p in matching.get("points_attention",[]):
                                 st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
                         st.markdown("---"); st.code(res.get("response",""),language=None)
+                        with st.expander("🔧 Debug — job_analysis brut"):
+                            st.json(res.get("job_analysis", {}))
             elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---

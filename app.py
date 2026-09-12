@@ -10,7 +10,7 @@ from rag_pipeline import ask, create_chroma_collection
 from agent import run_agent
 from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
-from config import (PRIVATE_CODE, FALLBACK_CONFIG, WELCOME_FR, WELCOME_EN,
+from config import (get_private_code, FALLBACK_CONFIG, WELCOME_FR, WELCOME_EN,
                     CHEVRON_SVG, get_config_context, swap)
 
 st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷", layout="wide", initial_sidebar_state="collapsed")
@@ -893,7 +893,8 @@ if query_params.get("admin") == "1" or st.session_state.get("show_admin_login"):
     st.session_state.show_admin_login = True
     st.markdown('<div style="max-width:200px;margin:0 auto;opacity:.5">', unsafe_allow_html=True)
     ac = st.text_input("x", type="password", label_visibility="collapsed", placeholder="Code", key="admin_code")
-    if ac == PRIVATE_CODE:
+    admin_code = get_private_code()
+    if admin_code and ac == admin_code:
         st.session_state.is_private = True; st.session_state.admin_view = True; st.session_state.recos = load_recos()
         st.session_state.pop("admin_exp", None); st.session_state.pop("admin_cs", None); st.session_state.pop("admin_v", None)
         st.session_state.show_admin_login = False; st.rerun()

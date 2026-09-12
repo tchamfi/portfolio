@@ -2,9 +2,15 @@
 config.py — Constants, fallback config, welcome messages, helpers
 """
 
+import os
 import streamlit as st
 
-PRIVATE_CODE = "tchamfi"
+
+def get_private_code():
+    try:
+        return st.secrets.get("ADMIN_CODE", os.getenv("ADMIN_CODE", ""))
+    except Exception:
+        return os.getenv("ADMIN_CODE", "")
 
 FALLBACK_CONFIG = {
     "tjm": "650 - 750", "disponibilite": "Immediat", "remote": "IDF + Remote",

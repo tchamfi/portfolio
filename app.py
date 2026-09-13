@@ -872,7 +872,7 @@ if "matching" in tab_dict:
                                 else f"{requirement_count} critère{'s' if requirement_count != 1 else ''} analysé{'s' if requirement_count != 1 else ''} · {direct_count} satisfait{'s' if direct_count != 1 else ''} · {unknown_count} à préciser"))
                     if requirement_count == 1:
                         st.caption("This result covers a single criterion. Add the full job description for a more representative assessment." if lang == "en" else "Ce résultat porte sur un seul critère. Ajoutez la fiche de poste complète pour une évaluation plus représentative.")
-                    elif requirement_count:
+                    elif requirement_count and score is not None:
                         st.caption("This score covers the supplied criteria; it is not a hiring probability." if lang == "en" else "Ce score porte sur les critères fournis ; ce n’est pas une probabilité d’embauche.")
                     status_labels = {
                         "direct": "Met" if lang == "en" else "Satisfait",

@@ -55,6 +55,19 @@ class RetrievalIntegrationTests(unittest.TestCase):
                     baseline = rag.search_evidence(question, top_k=8)
                 self.assertEqual(actual, baseline)
 
+    def test_scope_decisions_retrieve_backlog_and_product_arbitrage_evidence(self):
+        actual_blocks = {item["id"]: item for item in doc_loader.load_documents_as_chunks()}
+        for requirement in (
+            "Il est capable de prendre des décisions sur le périmètre du besoin métier, en cohérence avec le rythme de développement choisi par l’équipe.",
+            "He can make decisions on the scope of business needs, in line with the development cadence chosen by the team.",
+        ):
+            with self.subTest(requirement=requirement):
+                found = {item["id"]: item for item in rag.search_evidence(requirement, top_k=5)}
+                self.assertTrue({"C07", "C08"}.issubset(found), list(found))
+                for identifier in ("C07", "C08"):
+                    self.assertEqual(found[identifier]["text"], actual_blocks[identifier]["text"])
+                    self.assertEqual(found[identifier]["metadata"], actual_blocks[identifier]["metadata"])
+
     def test_product_concept_results_are_repeatable_and_bounded(self):
         question = "Backlog, priorisation, roadmap, spécifications et tests utilisateurs avant validation des livrables"
         first = rag.search_evidence(question, top_k=99)

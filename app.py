@@ -3,6 +3,7 @@ Ask Lionel — Portfolio avec référentiel V3 (Streamlit Community Cloud)
 """
 
 import re, json, time
+from hashlib import sha256
 from html import escape
 import streamlit as st
 import streamlit.components.v1 as components
@@ -89,6 +90,12 @@ def _render_pagination_controls(total_items, page_size, state_key):
                 st.session_state[state_key] = min(total_pages - 1, page + 1); st.rerun()
 
 
+def _change_matching_page(state_key, step, total_pages):
+    """Update the visible slice before Streamlit reruns, without a new analysis."""
+    st.session_state[state_key] = max(0, min(
+        st.session_state.get(state_key, 0) + step, total_pages - 1))
+
+
 # JS injection pour styler les onglets après le rendu Streamlit
 TAB_JS = """
 <script>
@@ -96,6 +103,7 @@ function styleTabs() {
   var tabs = document.querySelectorAll('[data-baseweb="tab"], button[role="tab"]');
   if (!tabs.length) { setTimeout(styleTabs, 300); return; }
   tabs.forEach(function(tab) {
+    if (tab.closest('.st-key-matching-results')) return;
     var sel = tab.getAttribute('aria-selected') === 'true';
     tab.style.setProperty('font-size', '1rem', 'important');
     tab.style.setProperty('font-weight', '700', 'important');
@@ -866,10 +874,8 @@ if "matching" in tab_dict:
                             f'<div class="matching-score-inner" aria-hidden="true"><span class="matching-score-value">{score_value}</span>'
                             '<span class="matching-score-total">/100</span></div></div>'
                             f'<p class="matching-score-label">{escape(score_label)}</p></div>', unsafe_allow_html=True)
-                    direct_count = sum(r.get("status") == "direct" for r in requirements)
-                    unknown_count = sum(r.get("status") == "unknown" for r in requirements)
-                    st.caption((f"{requirement_count} {'criterion' if requirement_count == 1 else 'criteria'} analysed · {direct_count} met · {unknown_count} to clarify" if lang == "en"
-                                else f"{requirement_count} critère{'s' if requirement_count != 1 else ''} analysé{'s' if requirement_count != 1 else ''} · {direct_count} satisfait{'s' if direct_count != 1 else ''} · {unknown_count} à préciser"))
+                    st.caption((f"{requirement_count} {'criterion' if requirement_count == 1 else 'criteria'} analysed" if lang == "en"
+                                else f"{requirement_count} critère{'s' if requirement_count != 1 else ''} analysé{'s' if requirement_count != 1 else ''}"))
                     if requirement_count == 1:
                         st.caption("This result covers a single criterion. Add the full job description for a more representative assessment." if lang == "en" else "Ce résultat porte sur un seul critère. Ajoutez la fiche de poste complète pour une évaluation plus représentative.")
                     elif requirement_count and score is not None:
@@ -883,25 +889,61 @@ if "matching" in tab_dict:
                         "not_met": "Not met" if lang == "en" else "Non satisfait",
                     }
                     groups = (
-                        ("My strengths" if lang == "en" else "Mes points forts", "positive", [r for r in requirements if r.get("status") == "direct"]),
-                        ("Gaps against your requirements" if lang == "en" else "Écarts avec votre besoin", "negative", [r for r in requirements if r.get("status") == "not_met"]),
-                        ("Points to consider" if lang == "en" else "Points d’attention", "attention", [r for r in requirements if r.get("status") not in {"direct", "not_met"}]),
+                        ("Strengths" if lang == "en" else "Points forts", "positive", [r for r in requirements if r.get("status") == "direct"],
+                         "No criterion is classified as a strength. Check the other categories for details." if lang == "en" else "Aucun critère n’est classé parmi les points forts. Retrouvez le détail dans les autres catégories."),
+                        ("Points to consider" if lang == "en" else "Points d’attention", "attention", [r for r in requirements if r.get("status") not in {"direct", "not_met"}],
+                         "No criterion is classified as needing clarification or being partially covered." if lang == "en" else "Aucun critère n’est classé comme étant à préciser ou partiellement couvert."),
+                        ("Gaps" if lang == "en" else "Écarts", "negative", [r for r in requirements if r.get("status") == "not_met"],
+                         "No criterion is classified as an unmet requirement. Any uncertainties are listed under Points to consider." if lang == "en" else "Aucun critère n’est classé comme non satisfait. Les éventuelles incertitudes figurent dans les points d’attention."),
                     )
-                    for heading, tone, rows in groups:
-                        if not rows:
-                            continue
-                        st.markdown(f'<h3 class="matching-section-heading {tone}">{heading}</h3>', unsafe_allow_html=True)
-                        for requirement in rows:
-                            label = status_labels.get(requirement.get("status"), status_labels["unknown"])
-                            importance = ("Optional" if lang == "en" else "Optionnel") if requirement.get("importance") == "optional" else ("Required" if lang == "en" else "Requis")
-                            # The offer and model output are untrusted text, never executable markup.
-                            criterion = escape(str(requirement.get("text", "")))
-                            explanation = escape(str(_matching_explanation(requirement, lang))).replace("\n", "<br>")
-                            st.markdown(
-                                f'<article class="matching-card {tone}">'
-                                f'<div class="matching-card-meta">{escape(label)} · {escape(importance)}</div>'
-                                f'<div class="matching-card-criterion">{criterion}</div>'
-                                f'<p class="matching-card-body">{explanation}</p></article>', unsafe_allow_html=True)
+                    # Reset only when the assessed result changes, not when browsing its pages.
+                    navigation_signature = sha256(json.dumps(
+                        [matching.get("evaluation_key"), score, requirements],
+                        sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+                    if st.session_state.get("matching_navigation_signature") != navigation_signature:
+                        for _, tone, _, _ in groups:
+                            st.session_state[f"matching_page_{tone}"] = 0
+                        st.session_state.matching_navigation_signature = navigation_signature
+                    if requirements:
+                        with st.container(key="matching-results"):
+                            tabs = st.tabs([f"{heading} · {len(rows)}" for heading, _, rows, _ in groups])
+                            for tab, (heading, tone, rows, empty_message) in zip(tabs, groups):
+                                with tab:
+                                    st.markdown(f'<h3 class="matching-section-heading {tone}">{heading}</h3>', unsafe_allow_html=True)
+                                    if not rows:
+                                        st.caption(empty_message)
+                                        continue
+                                    page_size = 3
+                                    state_key = f"matching_page_{tone}"
+                                    page = _get_page(len(rows), page_size, state_key)
+                                    total_pages = -(-len(rows) // page_size)
+                                    start = page * page_size
+                                    end = min(start + page_size, len(rows))
+                                    with st.container(key=f"matching-pages-{tone}"):
+                                        if total_pages > 1:
+                                            previous, position, following = st.columns([1, 1.2, 1])
+                                            previous.button("← Previous" if lang == "en" else "← Précédent",
+                                                key=f"{state_key}_prev", disabled=page == 0, use_container_width=True,
+                                                on_click=_change_matching_page, args=(state_key, -1, total_pages))
+                                            following.button("Next →" if lang == "en" else "Suivant →",
+                                                key=f"{state_key}_next", disabled=page == total_pages - 1, use_container_width=True,
+                                                on_click=_change_matching_page, args=(state_key, 1, total_pages))
+                                            position.caption(f"Points {start + 1}–{end} of {len(rows)}" if lang == "en"
+                                                else f"Points {start + 1}–{end} sur {len(rows)}")
+                                        else:
+                                            st.caption(f"Points {start + 1}–{end} of {len(rows)}" if lang == "en"
+                                                else f"Points {start + 1}–{end} sur {len(rows)}")
+                                    for requirement in rows[start:end]:
+                                        label = status_labels.get(requirement.get("status"), status_labels["unknown"])
+                                        importance = ("Optional" if lang == "en" else "Optionnel") if requirement.get("importance") == "optional" else ("Required" if lang == "en" else "Requis")
+                                        # The offer and model output are untrusted text, never executable markup.
+                                        criterion = escape(str(requirement.get("text", "")))
+                                        explanation = escape(str(_matching_explanation(requirement, lang))).replace("\n", "<br>")
+                                        st.markdown(
+                                            f'<article class="matching-card {tone}">'
+                                            f'<div class="matching-card-meta">{escape(label)} · {escape(importance)}</div>'
+                                            f'<div class="matching-card-criterion">{criterion}</div>'
+                                            f'<p class="matching-card-body">{explanation}</p></article>', unsafe_allow_html=True)
                     if is_private:
                         corpus_version = matching.get("corpus_version", res.get("corpus_version", knowledge_status["version"]))
                         corpus_hash = matching.get("corpus_fingerprint", res.get("corpus_fingerprint", knowledge_status["fingerprint"]))

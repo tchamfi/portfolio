@@ -10,6 +10,7 @@ from datetime import datetime
 from rag_pipeline import ask, create_chroma_collection, get_knowledge_status, get_evidence_by_ids
 from agent import SCORING_VERSION, ASSESSMENT_VERSION
 from matching_service import run_matching as run_agent
+from matching_cache import CacheUnavailable
 from experience import experience_summary
 from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
@@ -814,9 +815,12 @@ if "matching" in tab_dict:
                     try:
                         st.session_state.agent_results=run_agent(job,rtype,language=lang)
                         st.session_state.pop("agent_error", None)
+                        st.session_state.pop("agent_error_code", None)
                     except Exception as e:
                         st.session_state.pop("agent_results", None)
                         st.session_state.agent_error = str(e)
+                        st.session_state.agent_error_code = (e.code if isinstance(e, CacheUnavailable) else
+                            {"FileNotFoundError": "M901", "TypeError": "M902", "KeyError": "M903"}.get(type(e).__name__, "M900"))
                 if "agent_results" in st.session_state:
                     try:
                         _res=st.session_state.agent_results; _m=_res.get("matching",{})
@@ -826,7 +830,8 @@ if "matching" in tab_dict:
                 if is_private:
                     st.error(f"Erreur lors de l'appel au modèle : {st.session_state.agent_error}")
                 else:
-                    st.warning("Une erreur est survenue pendant l'analyse. Merci de réessayer dans quelques instants." if lang=="fr" else "Something went wrong during the analysis. Please try again in a moment.")
+                    message = ("Une erreur est survenue pendant l'analyse. Merci de réessayer dans quelques instants." if lang=="fr" else "Something went wrong during the analysis. Please try again in a moment.")
+                    st.warning(message + " (" + st.session_state.get("agent_error_code", "M900") + ")")
             if "agent_results" in st.session_state:
                 res=st.session_state.agent_results; matching=res.get("matching")
                 if matching and matching.get("error"):
@@ -928,7 +933,7 @@ if "matching" in tab_dict:
                         st.code(res.get("response", ""), language=None)
                         with st.expander("Détail de l’analyse"):
                             st.json({"job_analysis": res.get("job_analysis", {}), "matching": matching, "metrics": res.get("metrics", {})})
-            elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
+            elif run and not job.strip(): st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---
 if "rdv" in tab_dict:

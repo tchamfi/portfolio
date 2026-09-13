@@ -8,6 +8,7 @@ from streamlit.testing.v1 import AppTest
 from agent import SCORING_VERSION, ASSESSMENT_VERSION
 from experience import evaluate_experience_requirement
 from rag_pipeline import get_knowledge_status
+from matching_cache import CacheUnavailable
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
 
@@ -172,6 +173,20 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertEqual(list(app.exception), [])
         self.assertTrue(any("incomplet" in item.value and "Sensibilisation aux prat" in item.value for item in app.info))
         self.assertFalse(any("Sources et méthode" in item.label for item in app.expander))
+
+    def test_service_error_keeps_private_details_hidden_and_does_not_claim_empty_offer(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.run()
+        app.text_area(key="job_input").set_value("Gestion de backlog")
+        with patch("matching_service.run_matching", side_effect=CacheUnavailable("private diagnostic", "M101")):
+            next(b for b in app.button if b.label == "Analyser").click().run()
+        self.assertEqual(list(app.exception), [])
+        warnings = " ".join(w.value for w in app.warning)
+        self.assertIn("M101", warnings)
+        self.assertNotIn("private diagnostic", warnings)
+        self.assertNotIn("Veuillez coller", warnings)
+        self.assertFalse(self.matching_gauges(app))
 
     def test_new_assessment_version_clears_old_result_without_calling_model(self):
         app = self.app()

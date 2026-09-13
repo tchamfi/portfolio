@@ -22,6 +22,10 @@ REQUEST_TIMEOUT = 10
 class CacheUnavailable(RuntimeError):
     """The persistent canonical result cannot currently be trusted or saved."""
 
+    def __init__(self, message, code="M110"):
+        super().__init__(message)
+        self.code = code
+
 
 def _key(value):
     if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", value):
@@ -82,7 +86,7 @@ def _decode_record(record, key):
 def _request(method, **kwargs):
     token = airtable_store.get_token()
     if not isinstance(token, str) or not token.strip():
-        raise CacheUnavailable("Matching cache credentials are unavailable.")
+        raise CacheUnavailable("Matching cache credentials are unavailable.", "M100")
     url = f"{airtable_store.API_URL}/{airtable_store.BASE_ID}/{airtable_store.CONFIG_TABLE}"
     try:
         response = getattr(requests, method)(
@@ -91,8 +95,12 @@ def _request(method, **kwargs):
         )
         response.raise_for_status()
         payload = response.json()
+    except requests.HTTPError as exc:
+        status = getattr(exc.response, "status_code", None)
+        code = {401: "M101", 403: "M101", 404: "M104", 422: "M122", 429: "M129"}.get(status, "M105")
+        raise CacheUnavailable("Matching cache request failed.", code) from None
     except (requests.RequestException, ValueError, TypeError):
-        raise CacheUnavailable("Matching cache request failed.") from None
+        raise CacheUnavailable("Matching cache request failed.", "M106") from None
     if not isinstance(payload, dict) or not isinstance(payload.get("records"), list):
         raise CacheUnavailable("Malformed matching cache response.")
     return payload

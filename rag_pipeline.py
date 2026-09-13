@@ -34,6 +34,11 @@ _PO_SEARCH_CONCEPTS = (
      r"\bbacklog\b", "user stories critères acceptation backlog management"),
     (r"\b(prioris\w*|priorit\w*|wsjf|arbitrages?|trade[ -]offs?|valeur metier|business value)\b",
      r"\b(priorisation wsjf|arbitrages produit)\b", "priorisation WSJF arbitrages produit backlog"),
+    (r"\b(decisions? sur le perimetre (?:du besoin|produit)|"
+     r"decisions? (?:on|about) (?:the )?(?:business|product|functional) scope|"
+     r"decisions? (?:on|about) the scope of (?:the )?business needs?)\b",
+     r"\b(backlog|priorisation wsjf|arbitrages produit)\b",
+     "périmètre fonctionnel backlog arbitrages produit priorisation WSJF"),
     (r"\b(roadmaps?|feuilles? de route|release planning|plans? de release)\b",
      r"\broadmap\b", "roadmap release planning delivery"),
     (r"\b(cahiers? des charges|specifications?|analyse des besoins|analyser les besoins|"

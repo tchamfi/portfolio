@@ -1,5 +1,6 @@
 """Exercise Streamlit flows with external services stubbed at their boundary."""
 from contextlib import ExitStack
+from copy import deepcopy
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -32,6 +33,20 @@ class AppIntegrationTests(unittest.TestCase):
 
     def matching_gauges(self, app):
         return [m.value for m in app.markdown if m.value.startswith('<div class="matching-score">')]
+
+    def long_matching_result(self):
+        statuses = ([("positive", "direct")] * 8
+                    + [("attention", status) for status in ("partial", "training", "historical", "unknown")]
+                    + [("negative", "not_met")] * 2)
+        counters = {"positive": 0, "attention": 0, "negative": 0}
+        requirements = []
+        for tone, status in statuses:
+            counters[tone] += 1
+            requirements.append({
+                "text": f"criterion-{tone}-{counters[tone]}", "status": status,
+                "importance": "required", "justification": "Je présente mon expérience pour ce besoin.",
+            })
+        return {"matching": {"score_global": 80, "requirements": requirements}, "job_analysis": {}}
 
     def test_admin_displays_actual_corpus_and_scoped_durations(self):
         app = self.app()
@@ -132,7 +147,9 @@ class AppIntegrationTests(unittest.TestCase):
              "justification": "Je ne peux pas confirmer cette certification."}]}}
         app.run()
         self.assertEqual(list(app.exception), [])
-        gap, unknown = self.matching_cards(app)
+        cards = self.matching_cards(app)
+        gap = next(card for card in cards if 'matching-card negative' in card)
+        unknown = next(card for card in cards if 'matching-card attention' in card)
         self.assertIn("Non satisfait", gap)
         self.assertIn("&lt;img", gap)
         self.assertIn("&lt;script&gt;", gap)
@@ -141,6 +158,109 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertIn("À préciser", unknown)
         self.assertIn("Optionnel", unknown)
         self.assertNotIn("Non satisfait", unknown)
+
+    def test_matching_categories_paginate_every_point_without_another_analysis(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.session_state["agent_results"] = self.long_matching_result()
+        labels = ["Points forts · 8", "Points d’attention · 4", "Écarts · 2"]
+
+        def cards_in(label):
+            tab = next(tab for tab in app.tabs if tab.label == label)
+            return self.matching_cards(tab)
+
+        def point_numbers(label, tone):
+            return [number for number in range(1, 9)
+                    if any(f"criterion-{tone}-{number}</div>" in card for card in cards_in(label))]
+
+        with patch("matching_service.run_matching") as run_matching:
+            app.run()
+            self.assertEqual(list(app.exception), [])
+            self.assertEqual([tab.label for tab in app.tabs], labels)
+            self.assertEqual(point_numbers(labels[0], "positive"), [1, 2, 3])
+            self.assertEqual(point_numbers(labels[1], "attention"), [1, 2, 3])
+            self.assertEqual(point_numbers(labels[2], "negative"), [1, 2])
+            self.assertTrue(app.button(key="matching_page_positive_prev").disabled)
+            self.assertTrue(app.button(key="matching_page_attention_prev").disabled)
+            self.assertFalse(any(b.key == "matching_page_negative_next" for b in app.button))
+            self.assertTrue(any(c.value == "Points 1–3 sur 8" for c in app.caption))
+
+            # Each point appears on exactly one page, including the short last page.
+            positive_points = point_numbers(labels[0], "positive")
+            for expected in ([4, 5, 6], [7, 8]):
+                app.button(key="matching_page_positive_next").click().run()
+                self.assertEqual(list(app.exception), [])
+                self.assertEqual(point_numbers(labels[0], "positive"), expected)
+                positive_points.extend(point_numbers(labels[0], "positive"))
+                self.assertEqual(point_numbers(labels[1], "attention"), [1, 2, 3])
+                self.assertIn("80/100", self.matching_gauges(app)[0])
+            self.assertEqual(positive_points, list(range(1, 9)))
+            self.assertTrue(app.button(key="matching_page_positive_next").disabled)
+            self.assertTrue(any(c.value == "Points 7–8 sur 8" for c in app.caption))
+
+            app.button(key="matching_page_attention_next").click().run()
+            self.assertEqual(point_numbers(labels[1], "attention"), [4])
+            self.assertIn("À préciser", cards_in(labels[1])[0])
+            self.assertNotIn("Non satisfait", cards_in(labels[1])[0])
+            self.assertTrue(app.button(key="matching_page_attention_next").disabled)
+            self.assertEqual(point_numbers(labels[0], "positive"), [7, 8])
+            self.assertEqual(point_numbers(labels[2], "negative"), [1, 2])
+
+            # Going backwards affects only the selected category and reaches page one.
+            for expected in ([4, 5, 6], [1, 2, 3]):
+                app.button(key="matching_page_positive_prev").click().run()
+                self.assertEqual(point_numbers(labels[0], "positive"), expected)
+                self.assertEqual(point_numbers(labels[1], "attention"), [4])
+            self.assertTrue(app.button(key="matching_page_positive_prev").disabled)
+            app.button(key="matching_page_attention_prev").click().run()
+            self.assertEqual(point_numbers(labels[1], "attention"), [1, 2, 3])
+            self.assertTrue(app.button(key="matching_page_attention_prev").disabled)
+            self.assertEqual(list(app.exception), [])
+            run_matching.assert_not_called()
+
+    def test_matching_pages_persist_for_same_result_and_reset_for_a_new_result(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        result = self.long_matching_result()
+        app.session_state["agent_results"] = result
+        with patch("matching_service.run_matching") as run_matching:
+            app.run()
+            app.button(key="matching_page_positive_next").click().run()
+            app.button(key="matching_page_positive_next").click().run()
+            app.button(key="matching_page_attention_next").click().run()
+
+            app.session_state["agent_results"] = deepcopy(result)
+            app.run()
+            self.assertEqual(app.session_state["matching_page_positive"], 2)
+            self.assertEqual(app.session_state["matching_page_attention"], 1)
+            self.assertTrue(any("criterion-positive-7</div>" in card for card in self.matching_cards(app)))
+
+            updated = deepcopy(result)
+            updated["matching"]["requirements"][0]["text"] = "Nouveau besoin métier"
+            app.session_state["agent_results"] = updated
+            app.run()
+            self.assertEqual(list(app.exception), [])
+            self.assertEqual(app.session_state["matching_page_positive"], 0)
+            self.assertEqual(app.session_state["matching_page_attention"], 0)
+            self.assertTrue(any("Nouveau besoin métier" in card for card in self.matching_cards(app)))
+            self.assertTrue(any("criterion-attention-1</div>" in card for card in self.matching_cards(app)))
+            run_matching.assert_not_called()
+
+    def test_matching_categories_and_page_ranges_are_translated_and_include_empty_groups(self):
+        app = self.app()
+        app.radio(key="lang_radio").set_value("EN").run()
+        app.session_state["current_tab"] = "matching"
+        result = self.long_matching_result()
+        result["matching"]["requirements"] = result["matching"]["requirements"][:8]
+        app.session_state["agent_results"] = result
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertEqual([tab.label for tab in app.tabs], ["Strengths · 8", "Points to consider · 0", "Gaps · 0"])
+        self.assertTrue(any(c.value == "Points 1–3 of 8" for c in app.caption))
+        self.assertEqual(len(self.matching_cards(app.tabs[0])), 3)
+        for tab in app.tabs[1:]:
+            self.assertEqual(self.matching_cards(tab), [])
+            self.assertTrue(tab.caption)
 
     def test_data_tenure_gap_does_not_claim_total_po_tenure_in_first_person(self):
         check = evaluate_experience_requirement(5, "data_product_owner", as_of="2026-09-13")

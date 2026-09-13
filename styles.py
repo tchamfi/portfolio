@@ -198,16 +198,17 @@ CSS = """
     .stApp .matching-card-criterion{color:#475569!important;font-size:.84rem;line-height:1.5;margin-bottom:.6rem;}
     .stApp .matching-card-body{color:#1e293b!important;font-size:.96rem;line-height:1.65;white-space:pre-line;}
 
-    /* Matching navigation: keep all categories visible without a second scroll area. */
-    .st-key-matching-results .stTabs [data-baseweb="tab-list"]{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;box-sizing:border-box;padding:5px!important;gap:5px!important;border-radius:14px!important;overflow:visible!important;box-shadow:none!important;}
-    .st-key-matching-results .stTabs button[role="tab"]{--category-color:#166534;--category-tint:#edf9f0;--category-border:#ccebd5;display:flex;align-items:center;justify-content:center;width:100%!important;min-width:0!important;min-height:52px;height:auto!important;padding:9px 7px!important;border-radius:10px!important;border:1.5px solid var(--category-border)!important;background:var(--category-tint)!important;color:var(--category-color)!important;-webkit-text-fill-color:var(--category-color)!important;font-size:.82rem!important;line-height:1.35!important;white-space:normal!important;overflow-wrap:anywhere;letter-spacing:0!important;transform:none!important;box-shadow:none!important;transition:background .15s,border-color .15s!important;}
-    .st-key-matching-results .stTabs button[role="tab"]:nth-of-type(2){--category-color:#92400e;--category-tint:#fff7e6;--category-border:#f4dfb0;}
-    .st-key-matching-results .stTabs button[role="tab"]:nth-of-type(3){--category-color:#9f1239;--category-tint:#fff0f2;--category-border:#f5cdd5;}
-    .st-key-matching-results .stTabs button[role="tab"] *{font-size:inherit!important;line-height:inherit!important;color:inherit!important;-webkit-text-fill-color:inherit!important;white-space:normal!important;}
-    .st-key-matching-results .stTabs button[role="tab"]:hover{border-color:var(--category-color)!important;transform:none!important;box-shadow:none!important;}
-    .st-key-matching-results .stTabs button[role="tab"][aria-selected="true"]{background:var(--category-color)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border-color:var(--category-color)!important;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2)!important;transform:none!important;}
-    .st-key-matching-results .stTabs button[role="tab"]:focus-visible{outline:3px solid #4338ca!important;outline-offset:2px!important;}
-    .st-key-matching-results .stTabs [data-baseweb="tab-panel"]{padding-top:.8rem!important;}
+    /* ARIA roles support both Streamlit's current and former tab implementations. */
+    .st-key-matching-results .stTabs [role="tablist"]{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;box-sizing:border-box;padding:5px!important;gap:5px!important;background:#fff!important;border:1.5px solid #e2e8f0!important;border-bottom:0!important;border-radius:14px!important;overflow:visible!important;box-shadow:none!important;}
+    .st-key-matching-results .stTabs [role="tab"]{--category-color:#166534;--category-tint:#edf9f0;--category-border:#ccebd5;display:flex;align-items:center;justify-content:center;width:100%!important;min-width:0!important;min-height:52px;height:auto!important;padding:9px 7px!important;border-radius:10px!important;border:1.5px solid var(--category-border)!important;background:var(--category-tint)!important;color:var(--category-color)!important;-webkit-text-fill-color:var(--category-color)!important;font-size:.82rem!important;line-height:1.35!important;white-space:normal!important;overflow-wrap:anywhere;letter-spacing:0!important;transform:none!important;box-shadow:none!important;transition:background .15s,border-color .15s!important;}
+    .st-key-matching-results .stTabs [role="tab"]:nth-of-type(2){--category-color:#92400e;--category-tint:#fff7e6;--category-border:#f4dfb0;}
+    .st-key-matching-results .stTabs [role="tab"]:nth-of-type(3){--category-color:#9f1239;--category-tint:#fff0f2;--category-border:#f5cdd5;}
+    .st-key-matching-results .stTabs [role="tab"] *{font-size:inherit!important;line-height:inherit!important;color:inherit!important;-webkit-text-fill-color:inherit!important;white-space:normal!important;}
+    .st-key-matching-results .stTabs [role="tab"]:hover{border-color:var(--category-color)!important;transform:none!important;box-shadow:none!important;}
+    .st-key-matching-results .stTabs [role="tab"][aria-selected="true"]{background:var(--category-color)!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border-color:var(--category-color)!important;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2)!important;transform:none!important;}
+    .st-key-matching-results .stTabs [role="tab"]:focus-visible{outline:3px solid #4338ca!important;outline-offset:2px!important;}
+    .st-key-matching-results .stTabs .react-aria-SelectionIndicator{display:none!important;}
+    .st-key-matching-results .stTabs [role="tabpanel"]{padding-top:.8rem!important;}
     .st-key-matching-results .matching-section-heading{margin:.15rem 0 .55rem!important;}
     .st-key-matching-results [class*="st-key-matching-pages-"] [data-testid="stHorizontalBlock"]{flex-direction:row!important;flex-wrap:nowrap!important;align-items:center;gap:.5rem!important;}
     .st-key-matching-results [class*="st-key-matching-pages-"] [data-testid="stColumn"]{min-width:0!important;}

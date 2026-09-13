@@ -152,39 +152,51 @@ le matching, les réserves, les références et les métadonnées de version.
    durée totale d’une mission.
 3. Exécuter les tests et les cas de recette concernés.
 4. Vérifier le diff, publier la branche puis intégrer le changement validé.
-5. Déployer le commit sur l’hébergeur réel et contrôler dans l’administration
+5. Vérifier le déploiement du commit sur Streamlit Community Cloud et contrôler dans l’administration
    la version et l’empreinte chargées.
 
 La reconstruction est automatique quand le contenu change dans le processus
 applicatif. Un redémarrage force aussi une initialisation propre. Une mise à
 jour uniquement dans une copie locale du fichier ne change pas le site distant.
 
-## Déployer sur l’hébergement existant
+## Déployer sur Streamlit Community Cloud
 
-Le dépôt fourni n’identifie pas à lui seul le service qui exécute le site :
-aucun workflow de déploiement ni configuration Docker ou métadonnée de Space
-n’était présent lors de cette intégration. Un push GitHub n’atteste donc pas
-qu’une nouvelle version est en ligne.
+Le site est hébergé sur Streamlit Community Cloud. Ouvrir son espace de travail
+sur [share.streamlit.io](https://share.streamlit.io/) et sélectionner l’application
+existante. Les paramètres du compte restent à vérifier dans le tableau de bord :
 
-Après validation de la branche, conserver l’identifiant du commit précédent
-pour le retour arrière, puis fusionner le changement et utiliser le chemin
-correspondant à l’hébergement effectivement configuré :
-
-| Hébergement effectif | Action |
+| Paramètre attendu | Valeur à vérifier |
 | --- | --- |
-| Streamlit connecté à ce dépôt | Vérifier le dépôt, la branche et le fichier d’entrée `app.py` dans le tableau de bord ; lancer ou attendre le redéploiement de ce commit. Vérifier les secrets côté hébergeur. |
-| Hugging Face Space existant | Vérifier son dépôt propre, sa configuration de lancement et son éventuelle synchronisation GitHub. Si aucune synchronisation n’existe, publier le commit dans le dépôt du Space selon son mécanisme existant, puis suivre la reconstruction. Ne pas remplacer arbitrairement son SDK ou son point d’entrée. |
-| Autre serveur ou hébergeur | Mettre à jour le checkout ou l’image vers le commit validé, installer les dépendances et redémarrer le service Streamlit avec sa configuration existante. |
+| Dépôt GitHub | `tchamfi/portfolio` |
+| Branche déployée | `main` |
+| Fichier d’entrée | `app.py` |
 
-Dans tous les cas, ouvrir le site public et refaire la recette ciblée. Contrôler
-la version du corpus dans l’administration et au moins une réponse QA, une
-réponse data et un matching. Une fusion réussie ou un build vert ne remplace
-pas ces contrôles applicatifs.
+Après validation de la branche de travail, conserver l’identifiant du commit
+précédent puis fusionner les changements dans la branche effectivement déployée.
+Streamlit Community Cloud synchronise automatiquement les mises à jour de cette
+branche GitHub. Une branche de travail distincte ne met pas à jour le site tant
+qu’elle n’est pas intégrée à la branche déployée. Voir la
+[documentation de mise à jour](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/edit-your-app).
 
-En cas de régression, revenir au commit de code précédent et redéployer ;
-conserver ensemble les versions du code, du corpus et des périodes d’expérience.
-Les configurations et données Airtable ne sont pas restaurées par un retour
-arrière Git : les vérifier séparément si elles ont été changées.
+Depuis **Manage app**, suivre les logs du déploiement et vérifier l’installation
+des dépendances ainsi que le démarrage de l’application. Vérifier aussi les
+secrets côté Streamlit. Si un redémarrage est nécessaire, utiliser **Reboot app**
+depuis les commandes de gestion ; consulter la
+[documentation de gestion](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app).
+Un redémarrage ne remplace pas la publication du code sur la branche surveillée.
+
+Ouvrir ensuite le site public et contrôler la version V3 et l’empreinte du corpus
+dans l’administration. Refaire au minimum les questions QA, ancienneté PO, rôle
+data chez EPSA et adoption de l’application RH, puis un matching avec une exigence
+d’ancienneté et un point à confirmer. Vérifier les références et les réserves
+affichées. Une fusion réussie ou des logs de démarrage sans erreur ne remplacent
+pas cette recette applicative.
+
+En cas de régression, créer un commit qui annule le changement sur la branche
+déployée, puis suivre sa synchronisation dans Streamlit Community Cloud.
+Restaurer ensemble le code, le corpus et les périodes d’expérience. Les
+configurations et données Airtable ne sont pas restaurées par un retour arrière
+Git : les vérifier séparément si elles ont été changées.
 
 ## Serveur MCP optionnel
 

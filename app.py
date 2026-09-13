@@ -1,5 +1,5 @@
 """
-Ask Lionel — Portfolio V2.5 (Hugging Face deployment)
+Ask Lionel — Portfolio avec référentiel V3 (Streamlit Community Cloud)
 """
 
 import re, json, time

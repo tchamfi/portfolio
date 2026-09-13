@@ -13,7 +13,7 @@ from rag_pipeline import get_knowledge_status, search_evidence
 TOP_K = 5
 BATCH_SIZE = 8
 SCORING_VERSION = "requirements-v1"
-ASSESSMENT_VERSION = "requested-role-v2"
+ASSESSMENT_VERSION = "requested-role-v3"
 STATUS_CREDIT = {"direct": 1, "partial": .5, "training": .25,
                  "historical": .25, "unknown": 0, "not_met": 0}
 IMPORTANCE_WEIGHT = {"required": 3, "optional": 1}
@@ -423,12 +423,33 @@ Les sources LinkedIn et les précisions du propriétaire explicitement attribué
 constituent des sources acceptées ; ne les déclasse pas au seul motif de leur nature.
 Utilise exclusivement les identifiants du tableau evidence propre à l'exigence.
 Les références à une source vide ne sont pas permises. Pas de score calculé.
+Les justifications sont destinées au recruteur sur le portfolio de Lionel.
+Rédige justification et uncovered_aspects.reason à la première personne de
+Lionel (je/j'ai en français, I/my en anglais), en une ou deux phrases naturelles.
+Texte simple sans Markdown ni HTML. Ne répète pas mécaniquement l'intitulé de
+l'exigence : il sera affiché séparément comme sous-titre.
+Décris concrètement mon activité et son rapport avec le besoin, avec le nom de
+l'entreprise seulement s'il figure dans les preuves de CETTE exigence.
+Exemple de ton, uniquement si ces faits sont étayés : « Chez EPSA, j'ai vérifié
+la mise en œuvre des règles de transformation et accompagné les filiales dans
+la centralisation de leurs données CRM. » Ne généralise pas ce seul exemple
+à toute ma carrière et n'ajoute ni durée ni résultat absents des preuves.
+Évite « le profil démontre », « le candidat possède », « les preuves montrent »
+et les formulations administratives. Ne cite pas les identifiants, les sources
+ou le barème dans ces phrases : evidence_ids conserve la traçabilité séparément.
+Pour unknown, écris par exemple « Je ne peux pas confirmer ce point avec les
+informations disponibles. » N'en déduis pas « je ne maîtrise pas » ou « je n'ai
+pas cette certification ». Pour partial/training/historical/not_met, conserve
+la limite exacte et son périmètre, sans promesse de la combler.
+La première personne change uniquement le ton, jamais le statut ni les faits.
+Ne reformule jamais les citations requirement_quote : garde l'extrait EXACT.
 JSON strict : {"assessments":[{"requirement_id":"R001","status":"direct",
 "evidence_ids":["C01"],"uncovered_aspects":[],
-"justification":"Responsabilité et exemple précis, avec limites utiles."}]}.
+"justification":"Mon activité concrète en lien avec le besoin, avec limites utiles."}]}.
 Pour un écart : "uncovered_aspects":[{"requirement_quote":"extrait exact de l'exigence reçue",
-"reason":"Limite constatée sur cette activité demandée."}].
-""" + ("Rédige les justifications en anglais." if language == "en" else "Rédige les justifications en français.")
+"reason":"Ma limite précise sur cette activité demandée."}].
+""" + ("Rédige toutes les justifications et les raisons en anglais, avec I/my."
+       if language == "en" else "Rédige toutes les justifications et les raisons en français, avec je/mon.")
     for start in range(0, len(requirements), BATCH_SIZE):
         batch = requirements[start:start + BATCH_SIZE]
         payload = {"job_title": job_analysis.get("titre", ""),

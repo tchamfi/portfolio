@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 from agent import SCORING_VERSION
+from experience import evaluate_experience_requirement
 from rag_pipeline import get_knowledge_status
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
@@ -61,6 +62,44 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertEqual(list(app.exception), [])
         self.assertFalse(app.metric)
         self.assertTrue(any("Aucune exigence" in m.value for m in app.info))
+
+    def test_single_criterion_result_scopes_score_and_keeps_calculation_in_sources(self):
+        check = evaluate_experience_requirement(10, "product_owner", as_of="2026-09-13")
+        for language in ("fr", "en"):
+            with self.subTest(language=language):
+                app = self.app()
+                if language == "en":
+                    app.radio(key="lang_radio").set_value("EN").run()
+                app.session_state["current_tab"] = "matching"
+                app.session_state["agent_results"] = {"matching": {"score_global": 100,
+                    "requirements": [{"requirement_id": "R001", "text": "10 years as Product Owner",
+                        "status": "direct", "importance": "required", "evidence_ids": [],
+                        "justification": check["reason"], "experience_check": check}]}}
+                app.run()
+                self.assertEqual(list(app.exception), [])
+                self.assertEqual(app.metric[0].value, "100/100")
+                self.assertIn("1 criterion" if language == "en" else "1 critère", app.metric[0].label)
+                self.assertTrue(any(("full job description" if language == "en" else "fiche de poste complète") in c.value for c in app.caption))
+                criterion, sources = app.expander[0], app.expander[1]
+                self.assertNotIn("R001", criterion.label)
+                summary = " ".join(m.value for m in criterion.markdown)
+                self.assertIn("10 years and 5 months" if language == "en" else "10 ans et 5 mois", summary)
+                self.assertNotIn("union des mois", summary)
+                self.assertTrue(any(check["reason"] in m.value for m in sources.markdown))
+
+    def test_short_tenure_explanation_preserves_uncertainty_at_a_boundary(self):
+        check = evaluate_experience_requirement(125 / 12, "product_owner", as_of="2026-09-13")
+        self.assertEqual(check["status"], "unknown")
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.session_state["agent_results"] = {"matching": {"score_global": 0,
+            "requirements": [{"requirement_id": "R001", "text": "Ancienneté minimale",
+                "status": "unknown", "importance": "required", "evidence_ids": [],
+                "justification": check["reason"], "experience_check": check}]}}
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertIn("À préciser", app.expander[0].label)
+        self.assertTrue(any("dates exactes restent à confirmer" in m.value for m in app.expander[0].markdown))
 
     def test_chat_passes_question_language_and_business_facts_separately(self):
         app = self.app()

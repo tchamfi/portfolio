@@ -10,7 +10,8 @@ CSS = """
     .block-container{max-width:1200px;padding-top:.5rem;}
     section[data-testid="stSidebar"]{display:none;}
     h1,h2,h3,h4{font-family:'Outfit',sans-serif!important;color:#1a1a2e!important;}
-    p,li,span,label,div{font-family:'Outfit',sans-serif!important;}
+    /* Streamlit Material icons need their native ligature font, not Outfit. */
+    p,li,span:not([data-testid="stIconMaterial"]),label,div{font-family:'Outfit',sans-serif!important;}
     .stApp p, .stApp span, .stApp label, .stApp div{color:#334155;}
     .stApp strong, .stApp b{color:#1e293b;}
 

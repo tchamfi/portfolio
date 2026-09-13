@@ -105,7 +105,7 @@ ANALYTICS_TABLE = "tblOMs2pa8UFK9UKY"
 
 def _versioned_response(response, metrics):
     """Keep provenance in the existing text field without changing Airtable schema."""
-    keys = ("corpus_version", "corpus_fingerprint", "experience_fingerprint", "reference_fingerprint", "experience_as_of", "as_of", "scoring_version")
+    keys = ("corpus_version", "corpus_fingerprint", "experience_fingerprint", "reference_fingerprint", "experience_as_of", "as_of", "scoring_version", "assessment_version")
     context = {key: metrics[key] for key in keys if metrics.get(key)}
     prefix = "[Référentiel " + json.dumps(context, ensure_ascii=False) + "]\n" if context else ""
     return (prefix + (response or ""))[:5000]

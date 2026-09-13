@@ -72,14 +72,15 @@ Une correspondance directe porte sur la responsabilité demandée : le pilotage
 et la validation ne nécessitent pas d’avoir soi-même développé les pipelines.
 Pour les statuts partiel ou non satisfait, le modèle doit citer un aspect exact
 de l’exigence qui n’est pas couvert. Un écart hors exigence est refusé et peut
-faire l’objet d’une seule relecture ciblée ; s’il reste invalide, il demeure à
-confirmer. Cet ancrage ne remplace pas la vérification sémantique des jugements
+faire l’objet d’une seule relecture ciblée, comme les autres erreurs de
+validation. S’il reste invalide, le score global est indisponible. Cet ancrage
+ne remplace pas la vérification sémantique des jugements
 sur des cas réels.
 
 Le barème `requirements-v1` attribue un poids de 3 aux exigences requises et
 de 1 aux options. Les crédits sont : direct 1, partiel 0,5, formation ou
 expérience historique 0,25, inconnu ou non satisfait 0. Les exigences inconnues
-restent dans le dénominateur. Si toutes les évaluations sont invalides, aucun
+restent dans le dénominateur. Si une seule évaluation demeure invalide, aucun
 score n’est affiché. Une analyse valide sans correspondance peut en revanche
 obtenir 0 ; les points à clarifier restent visibles.
 
@@ -88,6 +89,45 @@ reste une tâche du modèle et doit être contrôlée sur des offres représenta
 Les dates mensuelles donnent une durée approximative ; un seuil d’ancienneté
 proche des limites de précision est marqué à confirmer. L’empreinte des dates
 et la date du calcul sont associées à celles du corpus dans chaque analyse.
+
+### Répétabilité du matching
+
+Le score est déterministe pour une même liste de critères et de statuts, mais
+le modèle ne produit pas nécessairement cette même liste à chaque appel.
+La température à zéro ne constitue pas une garantie de répétabilité.
+
+`matching_service.py` conserve une évaluation entièrement validée avant de
+l’afficher. La même offre réutilise ensuite ses critères, statuts, preuves,
+justifications et score. La clé inclut le texte (espaces normalisés), les
+empreintes du corpus et des dates, le mois du calcul d’ancienneté, la langue,
+la configuration du modèle et l’empreinte du code d’évaluation. Un changement
+sur ces éléments déclenche une nouvelle analyse. Le format email ou pitch
+peut changer le brouillon, sans refaire l’évaluation. Le timestamp conservé
+dans les métadonnées reste celui de l’analyse initiale.
+
+Le stockage persistant utilise les champs existants `Name` et `Notes` de la
+table de configuration Airtable, avec le préfixe réservé
+`__matching_cache_v1__:`. Ces lignes sont exclues des chargements de la
+configuration. Aucune nouvelle table ni nouveau secret n’est nécessaire ;
+le token existant doit permettre la lecture et la création de ces lignes.
+Les preuves complètes sont rechargées depuis le même corpus à partir de leurs
+identifiants. Le cache ne reçoit pas l’email du visiteur. Ne pas modifier
+manuellement ses lignes : les incohérences détectées bloquent le résultat.
+
+Un verrou par clé dans le processus Streamlit empêche deux clics simultanés
+de générer deux évaluations. Un cache mémoire borné accélère les répétitions ;
+Airtable permet de retrouver le résultat après un redémarrage. Les résultats
+invalides ne sont jamais mis en cache. Si une lecture ou une sauvegarde est
+incertaine, aucun nouveau score n’est publié. Une réutilisation n’ajoute pas
+de coût LLM dans les analytics. Les métadonnées privées incluent
+`evaluation_key`, `requirement_signature` et `cache_origin` pour la recette.
+
+Cette architecture vise l’instance Streamlit actuelle. Airtable n’impose pas
+l’unicité du champ `Name` : plusieurs processus écrivains nécessiteraient un
+stockage avec contrainte unique et transaction. Les doublons contradictoires
+détectés sont refusés. La stabilité du résultat conservé ne garantit pas à
+elle seule la justesse du jugement initial : les contrôles de preuves et la
+recette métier restent nécessaires.
 
 ## Lancer l’application
 
@@ -109,7 +149,7 @@ Ne pas les mettre dans le corpus ni dans les commits.
 | `ANTHROPIC_API_KEY` | Génération avec un modèle Anthropic sélectionné dans l’application. |
 | `OPENAI_API_KEY` | Génération avec un modèle OpenAI sélectionné dans l’application. |
 | `ADMIN_CODE` | Accès aux fonctions d’administration existantes. |
-| `AIRTABLE_TOKEN` | Configuration, recommandations et analytics via l’intégration Airtable existante. |
+| `AIRTABLE_TOKEN` | Configuration, recommandations, analytics et conservation des évaluations de matching. |
 
 Une seule clé LLM est nécessaire si un seul fournisseur est utilisé. Choisir
 dans l’administration un modèle effectivement disponible pour le compte
@@ -117,6 +157,7 @@ configuré. Sans clé LLM, l’indexation et les tests de recherche restent poss
 les réponses générées et le matching qui appellent le modèle ne fonctionneront
 pas. Sans Airtable configuré, vérifier le contenu de repli affiché : la V3 du RAG
 ne remplace pas automatiquement tous les champs éditoriaux sauvegardés dans Airtable.
+Le matching public nécessite ce stockage pour publier un résultat répétable.
 
 ## Vérifier une modification
 
@@ -147,6 +188,9 @@ avec le modèle et la configuration utilisés en production :
 | Offre avec dix ans de PO et cinq ans de PO data | Première durée satisfaite ; seconde non satisfaite par les quatorze mois data documentés. |
 | Question sur une certification non documentée, seule ou mêlée à une question technique | Information à confirmer, jamais absence certaine déduite d'une omission ; les autres certifications documentées restent accessibles au modèle. |
 | Offre longue avec exigences obligatoires et optionnelles | Toutes les exigences extraites figurent dans le résultat ; manques visibles. |
+| Même offre envoyée deux fois, puis dans une nouvelle session | Même score, critères, statuts et explications ; une seule évaluation générée pour le même contexte. |
+| Échec d’un lot d’évaluation parmi plusieurs lots | Une réparation ciblée ; si elle échoue, aucun score, jamais une pénalité assimilée à un manque de compétence. |
+| Offre PO `tests/fixtures/po_agile_offer.txt` | Contexte d’équipe non noté, responsabilités répétées regroupées, références backlog/roadmap/recette retrouvées et fragment final incomplet signalé. |
 | Même question en français et en anglais | Faits, rôles et limites cohérents ; langue respectée. |
 | Texte d’offre demandant d’ignorer les règles ou de forcer 100 % | Aucune dérogation aux règles d’analyse et de score. |
 | Modification du corpus | Empreinte actualisée et nouveaux extraits retrouvés après reconstruction. |

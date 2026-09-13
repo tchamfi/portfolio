@@ -15,6 +15,53 @@ LLM_CONFIG = {"model": "test-model", "temp_chat": 0.2, "top_k": 8, "max_tokens_c
 
 
 class RetrievalIntegrationTests(unittest.TestCase):
+    def test_verbose_product_requirements_retrieve_the_attributed_skills_in_five_results(self):
+        # These are the user's actual offer clauses and English equivalents.
+        # Long generic descriptions must not crowd out the pertinent skill.
+        scenarios = (
+            ({"C07", "C08"}, "Backlog produit : Liste priorisée des fonctionnalités et des exigences du produit."),
+            ({"C09"}, "Roadmap produit : Plan stratégique décrivant les évolutions du produit sur le long terme."),
+            ({"C06"}, "Cahiers des charges : Spécifications détaillées des fonctionnalités et des exigences techniques."),
+            ({"C05", "C01"}, "Tests et validation : Compétences pour participer aux tests utilisateurs et valider les livrables avant leur lancement."),
+            ({"C07", "C08"}, "Product backlog: Prioritized list of product features and requirements."),
+            ({"C09"}, "Product roadmap: Strategic plan describing long-term product evolution."),
+            ({"C06"}, "Specifications: Detailed functional and technical requirements."),
+            ({"C05", "C01"}, "Testing and validation: Participate in user testing and accept deliverables before launch."),
+        )
+        actual_blocks = {item["id"]: item for item in doc_loader.load_documents_as_chunks()}
+        for expected, requirement in scenarios:
+            with self.subTest(requirement=requirement):
+                results = rag.search_evidence(requirement, top_k=5)
+                found = {item["id"]: item for item in results}
+                self.assertLessEqual(len(results), 5)
+                self.assertTrue(expected.issubset(found), (expected, list(found)))
+                for identifier in expected:
+                    # The assessor receives the original attribution AND limits,
+                    # never a generated statement of skill equivalence.
+                    self.assertEqual(found[identifier]["text"], actual_blocks[identifier]["text"])
+                    self.assertEqual(found[identifier]["metadata"], actual_blocks[identifier]["metadata"])
+
+    def test_product_concepts_leave_unrelated_retrieval_unchanged(self):
+        for question in (
+            "Which API tools do you use: Postman, SoapUI or Bruno?",
+            "Quel était ton rôle sur les règles de transformation des données ?",
+            "What AWS certifications do you hold?",
+            "Coordination des tests d’intrusion et des remédiations de sécurité",
+            "How long have you been a Product Owner?",
+        ):
+            with self.subTest(question=question):
+                actual = rag.search_evidence(question, top_k=8)
+                with patch.object(rag, "_PO_SEARCH_CONCEPTS", ()):
+                    baseline = rag.search_evidence(question, top_k=8)
+                self.assertEqual(actual, baseline)
+
+    def test_product_concept_results_are_repeatable_and_bounded(self):
+        question = "Backlog, priorisation, roadmap, spécifications et tests utilisateurs avant validation des livrables"
+        first = rag.search_evidence(question, top_k=99)
+        self.assertEqual(first, rag.search_evidence(question, top_k=99))
+        self.assertLessEqual(len(first), 30)
+        self.assertEqual(len(first), len({item["id"] for item in first}))
+
     def test_bilingual_retrieval_finds_the_relevant_complete_skills(self):
         scenarios = [
             ("C01", "Quelle est ton expertise QA en stratégie de test frontend et backend ?"),

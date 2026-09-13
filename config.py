@@ -67,6 +67,15 @@ I answer based on his actual career history."""
 CHEVRON_SVG = '<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>'
 
 
+def get_operational_context():
+    """Approved live business facts, separate from the retrieval query."""
+    cfg = st.session_state.config
+    facts = {key: cfg.get(key, "") for key in ("disponibilite", "remote")}
+    if cfg.get("show_tjm", True):
+        facts["tjm"] = cfg.get("tjm", "")
+    return facts
+
+
 def get_config_context():
     cfg = st.session_state.config
     lang = st.session_state.get("lang", "fr")

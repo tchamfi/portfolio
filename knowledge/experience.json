@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "source_version": "skills_public.md V3.0",
+  "source_section": "3. Parcours de référence",
+  "date_precision": "month",
+  "scope_definitions": {
+    "total_it": "Missions IT professionnelles, hors stages et affiliations de conseil redondantes.",
+    "product_owner": "Missions Product Owner, Data Product Owner et Proxy Product Owner.",
+    "qa": "Missions exercées avec un rôle QA explicite ; la pratique de la recette en tant que PO ne rallonge pas cette durée de poste QA.",
+    "data_product_owner": "Mission explicitement identifiée comme Data Product Owner chez EPSA."
+  },
+  "duration_limits": [
+    "Les mois de missions simultanées ne sont comptés qu'une fois dans chaque périmètre.",
+    "Les dates LinkedIn sont au mois ; elles ne permettent pas un calcul exact au jour près.",
+    "La durée d'utilisation de chaque outil est non renseignée : Postman, SoapUI et Bruno ne reçoivent pas automatiquement la durée totale IT ou QA.",
+    "Le parcours QA continue de nourrir la pratique PO sans transformer chaque année PO en année de poste QA.",
+    "La mission data établit la responsabilité produit, le contrôle des transformations et la coordination des filiales ; elle n'établit pas une durée de développement de pipelines."
+  ],
+  "experiences": [
+    {
+      "id": "EXP_BNP",
+      "organization": "BNP Paribas Personal Finance",
+      "role": "Product Owner",
+      "start": "2026-06",
+      "end": null,
+      "professional": true,
+      "scopes": ["total_it", "product_owner"],
+      "references": ["L02"],
+      "contribution": "Référentiel applicatif, change management, data privacy/data management, WSJF et coordination distribuée."
+    },
+    {
+      "id": "EXP_GENERALI",
+      "organization": "Generali",
+      "role": "Product Owner — taskforce",
+      "start": "2026-03",
+      "end": "2026-05",
+      "professional": true,
+      "scopes": ["total_it", "product_owner"],
+      "references": ["L03"],
+      "contribution": "Pilotage de la performance applicative, incidents, remédiations, reporting et plans de coût."
+    },
+    {
+      "id": "EXP_EPSA",
+      "organization": "EPSA",
+      "role": "Data Product Owner et Product Owner d'application RH",
+      "start": "2025-01",
+      "end": "2026-02",
+      "professional": true,
+      "scopes": ["total_it", "product_owner", "data_product_owner"],
+      "references": ["L04", "U02", "U03"],
+      "contribution": "Plateforme centrale multi-CRM, contrôle de l'implémentation des règles de transformation et coordination des filiales. Application web RH testée, validée en recette, mise en production et adoptée par les RH."
+    },
+    {
+      "id": "EXP_ESSILOR",
+      "organization": "EssilorLuxottica",
+      "role": "Product Owner",
+      "start": "2019-06",
+      "end": "2024-12",
+      "professional": true,
+      "scopes": ["total_it", "product_owner"],
+      "references": ["L05"],
+      "contribution": "Produits techniques, APIs, AWS multi-région, releases, coordination internationale et accompagnement de Product Owners."
+    },
+    {
+      "id": "EXP_GRDF",
+      "organization": "GRDF",
+      "role": "Proxy Product Owner",
+      "start": "2018-07",
+      "end": "2019-05",
+      "professional": true,
+      "scopes": ["total_it", "product_owner"],
+      "references": ["L06"],
+      "contribution": "Analyse des besoins, recette fonctionnelle et animation Agile."
+    },
+    {
+      "id": "EXP_ENEDIS",
+      "organization": "Enedis",
+      "role": "Product Owner",
+      "start": "2016-05",
+      "end": "2018-07",
+      "professional": true,
+      "scopes": ["total_it", "product_owner"],
+      "references": ["L06"],
+      "contribution": "Backlog, échanges entre acteurs de l'électricité, recette et validation des versions."
+    },
+    {
+      "id": "EXP_ORANGE",
+      "organization": "Orange",
+      "role": "QA",
+      "start": "2013-11",
+      "end": "2016-04",
+      "professional": true,
+      "scopes": ["total_it", "qa"],
+      "references": ["L07", "U01"],
+      "contribution": "Conception et exécution de tests, validation d'APIs, spécifications et gestion des anomalies."
+    },
+    {
+      "id": "EXP_BOUYGUES",
+      "organization": "Bouygues Telecom",
+      "role": "QA",
+      "start": "2012-04",
+      "end": "2013-11",
+      "professional": true,
+      "scopes": ["total_it", "qa"],
+      "references": ["L08", "U01"],
+      "contribution": "Cahier de tests, QA mobile, robustesse, performance, non-régression et anomalies."
+    },
+    {
+      "id": "EXP_IER",
+      "organization": "IER–Bolloré",
+      "role": "QA",
+      "start": "2011-11",
+      "end": "2012-03",
+      "professional": true,
+      "scopes": ["total_it", "qa"],
+      "references": ["L09", "U01"],
+      "contribution": "Plans de test, tests fonctionnels et de non-régression, validation finale et documentation."
+    },
+    {
+      "id": "EXP_ANSALDO",
+      "organization": "Ansaldo",
+      "role": "Analyste logiciel",
+      "start": "2011-02",
+      "end": "2011-10",
+      "professional": true,
+      "scopes": ["total_it"],
+      "references": ["L10"],
+      "contribution": "Exigences de sécurité, relecture critique de code, couverture et cas de test."
+    },
+    {
+      "id": "EXP_HOMERIDER_STAGE",
+      "organization": "Homerider Systems",
+      "role": "Stage R&D software",
+      "start": "2010-02",
+      "end": "2010-09",
+      "professional": false,
+      "scopes": [],
+      "references": ["L11"],
+      "contribution": "Stage historique de développement firmware C embarqué.",
+      "exclusion_reason": "Stage conservé comme expérience historique, exclu du total professionnel."
+    },
+    {
+      "id": "EXP_UQAM_STAGE",
+      "organization": "UQAM",
+      "role": "Stage en laboratoire",
+      "start": "2009-06",
+      "end": "2009-09",
+      "professional": false,
+      "scopes": [],
+      "references": ["L11"],
+      "contribution": "Stage historique en développement Java et simulation robotique.",
+      "exclusion_reason": "Stage conservé comme expérience historique, exclu du total professionnel."
+    }
+  ]
+}

@@ -183,6 +183,7 @@ CSS = """
     .stApp .matching-score-total{color:#475569!important;font-size:.82rem;line-height:1.4;}
     .stApp .matching-score-label{color:#334155!important;font-size:.95rem;line-height:1.45;font-weight:600;max-width:28rem;}
     .matching-section-heading{font-size:.8rem!important;font-weight:700!important;letter-spacing:.055em;text-transform:uppercase;margin:1.5rem 0 .7rem!important;padding:0!important;line-height:1.5!important;}
+    .stApp .matching-section-heading *{color:inherit!important;}
     .stApp .matching-section-heading.positive{color:#166534!important;}
     .stApp .matching-section-heading.negative{color:#9f1239!important;}
     .stApp .matching-section-heading.attention{color:#92400e!important;}

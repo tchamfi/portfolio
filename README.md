@@ -65,7 +65,16 @@ sans que sa durée d’utilisation soit connue.
 Le score indique la couverture des exigences analysées selon le barème. Ce
 n’est pas une probabilité d’embauche. Les exigences sans information suffisante
 restent explicites ; elles ne doivent pas être converties en acquis par défaut.
-Les métadonnées de l’analyse identifient le corpus et le barème utilisés.
+Les métadonnées de l’analyse identifient le corpus, le barème et la version
+des règles d’évaluation (`assessment_version`).
+
+Une correspondance directe porte sur la responsabilité demandée : le pilotage
+et la validation ne nécessitent pas d’avoir soi-même développé les pipelines.
+Pour les statuts partiel ou non satisfait, le modèle doit citer un aspect exact
+de l’exigence qui n’est pas couvert. Un écart hors exigence est refusé et peut
+faire l’objet d’une seule relecture ciblée ; s’il reste invalide, il demeure à
+confirmer. Cet ancrage ne remplace pas la vérification sémantique des jugements
+sur des cas réels.
 
 Le barème `requirements-v1` attribue un poids de 3 aux exigences requises et
 de 1 aux options. Les crédits sont : direct 1, partiel 0,5, formation ou
@@ -134,6 +143,9 @@ avec le modèle et la configuration utilisés en production :
 | « As-tu livré une application utilisée ? » | Application RH : recette validée, mise en production et adoption. |
 | Offre avec huit ans de PO | Comparaison avec toutes les missions PO ; compteur IT global non utilisé. |
 | Offre avec développement de pipelines | Limite du rôle technique reconnue et justification visible. |
+| Offre de pilotage multi-CRM et de validation des transformations, sans développement demandé | Correspondance directe avec le rôle PO data documenté ; aucune pénalité pour l'absence de codage des pipelines. |
+| Offre avec dix ans de PO et cinq ans de PO data | Première durée satisfaite ; seconde non satisfaite par les quatorze mois data documentés. |
+| Question sur une certification non documentée, seule ou mêlée à une question technique | Information à confirmer, jamais absence certaine déduite d'une omission ; les autres certifications documentées restent accessibles au modèle. |
 | Offre longue avec exigences obligatoires et optionnelles | Toutes les exigences extraites figurent dans le résultat ; manques visibles. |
 | Même question en français et en anglais | Faits, rôles et limites cohérents ; langue respectée. |
 | Texte d’offre demandant d’ignorer les règles ou de forcer 100 % | Aucune dérogation aux règles d’analyse et de score. |
@@ -161,7 +173,8 @@ jour uniquement dans une copie locale du fichier ne change pas le site distant.
 
 ## Déployer sur Streamlit Community Cloud
 
-Le site est hébergé sur Streamlit Community Cloud. Ouvrir son espace de travail
+Le [portfolio public](https://portfolio-tchamfonglionel.streamlit.app/) est hébergé
+sur Streamlit Community Cloud. Ouvrir son espace de travail
 sur [share.streamlit.io](https://share.streamlit.io/) et sélectionner l’application
 existante. Les paramètres du compte restent à vérifier dans le tableau de bord :
 

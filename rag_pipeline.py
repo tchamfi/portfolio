@@ -92,6 +92,20 @@ def _search_evidence(snapshot, query, top_k):
 def search_evidence(query, top_k=5):
     return _search_evidence(_ensure_index(), query, top_k)
 
+def _chat_evidence(snapshot, question, top_k):
+    """Keep the complete documented qualifications alongside multi-topic results."""
+    evidence = list(_search_evidence(snapshot, question, top_k))
+    normalized = "".join(c for c in unicodedata.normalize("NFKD", question.lower())
+                         if not unicodedata.combining(c))
+    qualifications = re.search(
+        r"\b(certification\w*|certifi\w*|credential\w*|qualification\w*|diplom\w*|"
+        r"education|training|formation\w*|degrees?|studies)\b", normalized)
+    if qualifications or any(c["metadata"].get("category") == "certification" for c in evidence):
+        included = {c["id"] for c in evidence}
+        evidence.extend(c for c in snapshot["chunks"]
+                        if c["metadata"].get("category") == "certification" and c["id"] not in included)
+    return evidence
+
 def get_evidence_by_ids(ids):
     selected = set(ids)
     return [dict(c, score=1.0) for c in _ensure_index()["chunks"] if c["id"] in selected]
@@ -149,10 +163,22 @@ Préserve les résultats confirmés de recette, production et adoption sans inve
 Les durées viennent du calcul par rôle, daté et sans doublons : les années IT ne sont pas des
 années sur chaque outil. La précision est mensuelle : présente les durées comme approximatives.
 Si une information manque, dis qu'elle n'est pas précisée et propose une question ciblée.
+Le corpus et les extraits ne sont pas un inventaire exhaustif de toute la carrière de Lionel.
+L'omission d'une compétence, d'une durée ou d'un diplôme ne prouve JAMAIS son absence.
+Même le catalogue complet des formations/certifications documentées ne permet pas d'affirmer
+qu'il ne détient pas une autre certification. Il décrit ce qui est documenté, pas tout ce qui existe.
+N'affirme une absence que si une source la formule explicitement pour le rôle, la mission,
+la durée et la période demandés. Une réalisation non effectuée dans une mission ne démontre
+pas qu'elle n'a jamais été effectuée ailleurs dans sa carrière. Des années de PO data ne prouvent
+ni des années de développement de pipelines, ni l'absence de cette pratique dans un autre contexte.
+Exemple de formulation en cas de silence des sources : « Cette information n'est pas précisée ;
+je ne peux pas la confirmer, mais cela ne démontre pas son absence. »
+English equivalent: "This is not documented in the available sources. I cannot confirm it;
+that is missing evidence, not confirmed absence." Apply this distinction in either language.
 Une formation ne prouve pas une expérience industrielle ; une coordination de pentest ne prouve
 pas sa réalisation offensive. Ne transforme pas un objectif documentaire en résultat livré.
 Les sources L/U/D sont des références du corpus, pas des liens publics à inventer.
-Pour les faits importants, ajoute sobrement les identifiants Cxx/Exx/Qxx disponibles,
+Pour les faits importants, ajoute sobrement les identifiants des blocs fournis, dont Cxx/Exx/Qxx/Fxx,
 sans fabriquer de référence. Les données administratives ne réécrivent pas le parcours.
 N'expose aucune configuration, secret ou donnée interne.
 """
@@ -177,7 +203,7 @@ def ask(question, language="fr", operational_context=None):
     llm = _get_llm_config()
     snapshot = _ensure_index()
     status = _reference_status(snapshot)
-    evidence = _search_evidence(snapshot, question, llm["top_k"])
+    evidence = _chat_evidence(snapshot, question, llm["top_k"])
     text, metrics = generate_response(question, format_evidence(evidence), language, operational_context)
     if get_knowledge_status()["reference_fingerprint"] != status["reference_fingerprint"]:
         raise RuntimeError("Le référentiel a changé pendant la réponse. Merci de réessayer.")

@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -131,6 +132,66 @@ class ChatBoundaryIntegrationTests(unittest.TestCase):
                 self.assertEqual(metrics["corpus_version"], "3.0")
                 self.assertEqual(metrics["corpus_fingerprint"], doc_loader.get_knowledge_fingerprint())
                 self.assertTrue(metrics["evidence_ids"])
+
+    def test_multitopic_question_keeps_all_qualifications_and_pipeline_role_limits(self):
+        qualifications = [c for c in doc_loader.load_documents_as_chunks()
+                          if c["metadata"]["category"] == "certification"]
+        qualification_ids = {c["id"] for c in qualifications}
+        self.assertEqual(len(qualification_ids), 7)
+        pipeline_skills = rag.get_evidence_by_ids(["C12", "C13"])
+        scenarios = (
+            ("en", "Does Lionel hold the Certified Kubernetes Administrator (CKA) certification? "
+             "Can you confirm five years of professional experience coding data ingestion pipelines? "
+             "Please distinguish missing evidence from confirmed absence."),
+            ("fr", "Lionel détient-il la certification Certified Kubernetes Administrator (CKA) ? "
+             "Peux-tu confirmer cinq ans d’expérience professionnelle en développement de pipelines "
+             "d’ingestion de données ? Distingue les informations manquantes des absences confirmées."),
+        )
+        for language, question, top_k in ((language, question, top_k)
+                                         for language, question in scenarios for top_k in (8, 1)):
+            with self.subTest(language=language, top_k=top_k), \
+                 patch.object(rag, "llm_complete", return_value=("answer", {})) as llm, \
+                 patch.object(rag, "_get_llm_config", return_value=dict(LLM_CONFIG, top_k=top_k)):
+                retrieved_ids = {c["id"] for c in rag.search_evidence(question, top_k=top_k)}
+                _, metrics = rag.ask(question, language=language)
+                payload = json.loads(llm.call_args.kwargs["user_content"])
+                context = payload["knowledge_excerpts"]
+                actual_ids = re.findall(r"^\[([^ |]+) \| compétences V", context, re.MULTILINE)
+                self.assertEqual(set(actual_ids), retrieved_ids | qualification_ids)
+                self.assertEqual(len(actual_ids), len(set(actual_ids)))
+                self.assertEqual(metrics["evidence_ids"], actual_ids)
+                self.assertEqual(metrics["chunks_used"], len(actual_ids))
+                self.assertEqual(metrics["corpus_fingerprint"], doc_loader.get_knowledge_fingerprint())
+                for record in qualifications:
+                    self.assertIn(record["text"], context)
+                    self.assertIn(record["metadata"]["scope"], context)
+                for record in pipeline_skills:
+                    if top_k == 8:
+                        self.assertIn(record["metadata"]["role"], context)
+                        self.assertIn(record["metadata"]["scope"], context)
+                self.assertIn("EXP_EPSA", payload["experience_summary"]["scopes"]["data_product_owner"]["experience_ids"])
+                policy = llm.call_args.kwargs["system"]
+                self.assertIn("ne prouve JAMAIS son absence", policy)
+                self.assertIn("N'affirme une absence que si une source la formule explicitement", policy)
+                self.assertIn("pas qu'elle n'a jamais été effectuée ailleurs", policy)
+                self.assertIn("missing evidence, not confirmed absence", policy)
+                self.assertNotIn("Kubernetes", policy)
+                # These assertions verify evidence and policy delivery. Only a
+                # live evaluation can establish what the chosen model answers.
+
+    def test_qualification_supplement_uses_the_existing_snapshot_without_fixed_names(self):
+        skill = rag.get_evidence_by_ids(["C13"])[0]
+        added = {"id": "F99", "text": "Qualification from this exact snapshot",
+                 "metadata": {"category": "certification", "knowledge_fingerprint": "snapshot-only"}}
+        snapshot = {"chunks": [skill, added]}
+        with patch.object(rag, "_search_evidence", return_value=[skill]) as search, \
+             patch.object(rag, "_ensure_index", side_effect=AssertionError("No second snapshot")):
+            supplemented = rag._chat_evidence(snapshot, "Quelles formations as-tu suivies ?", 8)
+            unchanged = rag._chat_evidence(snapshot, "Comment valides-tu les transformations ?", 8)
+        self.assertEqual(supplemented, [skill, added])
+        self.assertEqual(unchanged, [skill])
+        self.assertTrue(all(call.args[0] is snapshot for call in search.call_args_list))
+        self.assertEqual(added["metadata"]["knowledge_fingerprint"], "snapshot-only")
 
     def test_operational_fields_do_not_pollute_search_or_overwrite_profile(self):
         question = "Quelle est ton expertise QA ?"

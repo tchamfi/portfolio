@@ -82,6 +82,81 @@ class AgentTests(unittest.TestCase):
         row = agent._validate_judgment(requirement(), judgment(status="not_met", evidence_ids=[]), [])
         self.assertEqual(row["status"], "unknown")
 
+    def test_unrequested_pipeline_coding_is_not_a_valid_gap_for_product_ownership(self):
+        req = requirement(text="Piloter la centralisation des données de plusieurs CRM et vérifier les règles de transformation.")
+        assessment = judgment(status="partial")
+        assessment["uncovered_aspects"] = [{
+            "requirement_quote": "construire les pipelines",
+            "reason": "La construction technique était réalisée par les Data Engineers."}]
+        row = agent._validate_judgment(req, assessment, [evidence()])
+        self.assertEqual(row["status"], "unknown")
+        self.assertFalse(row["assessment_valid"])
+        self.assertEqual(row["validation_code"], "unanchored_gap")
+
+    def test_direct_matches_requested_product_responsibility_without_claiming_code(self):
+        req = requirement(text="Piloter la centralisation multi-CRM et vérifier les transformations.")
+        source = {"id": "C12", "text": "Lionel pilote la centralisation multi-CRM et vérifie les transformations. Les Data Engineers construisent les pipelines.",
+                  "metadata": {"role": "responsabilité produit"}, "score": .9}
+        assessment = judgment(evidence_ids=["C12"])
+        assessment["justification"] = "Le pilotage multi-CRM et la validation des transformations demandés sont explicitement attribués."
+        row = agent._validate_judgment(req, assessment, [source])
+        self.assertEqual(row["status"], "direct")
+        self.assertEqual(row["uncovered_aspects"], [])
+
+    def test_actual_requested_development_gap_remains_partial_without_review(self):
+        req = requirement(text="Piloter la centralisation et développer soi-même les pipelines.")
+        assessment = judgment(status="partial")
+        assessment["uncovered_aspects"] = [{
+            "requirement_quote": "développer soi-même les pipelines",
+            "reason": "Le pilotage est attribué au candidat ; la construction relevait des Data Engineers."}]
+        with patch.object(agent, "llm_complete", return_value=(json.dumps({"assessments": [assessment]}), METRICS)) as llm:
+            result, _ = agent.compute_matching({"requirements": [req]}, {"R001": [evidence()]})
+        self.assertEqual(result["requirements"][0]["status"], "partial")
+        self.assertEqual(result["requirements"][0]["uncovered_aspects"], assessment["uncovered_aspects"])
+        self.assertEqual(result["score_global"], 50)
+        self.assertEqual(llm.call_count, 1)
+
+    def test_invalid_gap_review_is_bounded_and_does_not_promote_automatically(self):
+        req = requirement(text="Piloter la centralisation multi-CRM.")
+        invalid = judgment(status="partial")  # No aspect of the requirement is identified.
+        with patch.object(agent, "llm_complete", return_value=(json.dumps({"assessments": [invalid]}), METRICS)) as llm:
+            result, _ = agent.compute_matching({"requirements": [req]}, {"R001": [evidence()]})
+        self.assertEqual(llm.call_count, 2)
+        self.assertEqual(result["requirements"][0]["status"], "unknown")
+        self.assertIsNone(result["score_global"])
+        self.assertTrue(result["analysis_unavailable"])
+
+    def test_live_six_requirement_regression_reviews_only_unrequested_coding_gap(self):
+        reqs = [
+            requirement(1, text="10 ans comme PO", kind="experience", experience={"minimum_years": 10, "scope": "product_owner"}),
+            requirement(2, text="Plans et stratégies de test QA frontend et backend"),
+            requirement(3, text="API Postman SoapUI Bruno"),
+            requirement(4, text="Piloter la centralisation des données de plusieurs CRM et vérifier les règles de transformation."),
+            requirement(5, text="5 ans comme PO data", kind="experience", experience={"minimum_years": 5, "scope": "data_product_owner"}),
+            requirement(6, text="Certification CKA", importance="optional"),
+        ]
+        old_partial = judgment("R004", status="partial")
+        old_partial["justification"] = "Le pilotage correspond, mais les Data Engineers construisaient les pipelines."
+        old_partial["uncovered_aspects"] = [{"requirement_quote": "construire les pipelines", "reason": "La construction relevait des Data Engineers."}]
+        first = {"assessments": [judgment("R001"), judgment("R002"), judgment("R003"), old_partial,
+                                  judgment("R005", status="unknown", evidence_ids=[]),
+                                  judgment("R006", status="unknown", evidence_ids=[])]}
+        corrected = judgment("R004")
+        corrected["justification"] = "Le pilotage multi-CRM et la vérification des transformations demandés sont attribués au candidat."
+        checks = [{"status": "meets", "reason": "Expérience PO suffisante", "references": ["L01"]},
+                  {"status": "not_met", "reason": "Durée PO data de 14 mois, inférieure aux 5 ans demandés", "references": ["L04"]}]
+        with patch.object(agent, "llm_complete", side_effect=[(json.dumps(first), METRICS),
+                (json.dumps({"assessments": [corrected]}), METRICS)]) as llm, \
+             patch.object(agent, "evaluate_experience_requirement", side_effect=checks):
+            result, metrics = agent.compute_matching({"requirements": reqs}, {r["id"]: [evidence()] for r in reqs})
+        self.assertEqual(result["score_global"], 75)
+        self.assertEqual([r["status"] for r in result["requirements"]], ["direct", "direct", "direct", "direct", "not_met", "unknown"])
+        review = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        self.assertEqual([r["id"] for r in review], ["R004"])
+        self.assertIn("DIRECT ne signifie PAS", llm.call_args.kwargs["system"])
+        self.assertEqual(metrics["tokens_input"], 20)
+        self.assertEqual(result["assessment_version"], agent.ASSESSMENT_VERSION)
+
     def test_cited_role_and_source_metadata_survive_matching(self):
         source = evidence()
         row = agent._validate_judgment(requirement(), judgment(), [source])

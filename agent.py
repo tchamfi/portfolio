@@ -13,6 +13,7 @@ from rag_pipeline import get_knowledge_status, search_evidence
 TOP_K = 5
 BATCH_SIZE = 8
 SCORING_VERSION = "requirements-v1"
+ASSESSMENT_VERSION = "requested-role-v2"
 STATUS_CREDIT = {"direct": 1, "partial": .5, "training": .25,
                  "historical": .25, "unknown": 0, "not_met": 0}
 IMPORTANCE_WEIGHT = {"required": 3, "optional": 1}
@@ -234,7 +235,7 @@ def query_rag_profile(requirements):
 def _unknown(requirement, reason):
     return {"requirement_id": requirement["id"], "text": requirement["text"],
             "importance": requirement["importance"], "kind": requirement["kind"],
-            "status": "unknown", "evidence_ids": [], "evidence": [],
+            "status": "unknown", "evidence_ids": [], "evidence": [], "uncovered_aspects": [],
             "justification": reason, "assessment_valid": False}
 
 
@@ -255,10 +256,29 @@ def _validate_judgment(requirement, judgment, evidence, language="fr"):
     if judgment["status"] != "unknown" and not ids:
         row["justification"] = "No evidence was cited to support this conclusion." if language == "en" else "Aucune preuve citée pour étayer cette conclusion."
         return row
+    uncovered = judgment.get("uncovered_aspects", [])
+    valid_aspects = isinstance(uncovered, list)
+    if valid_aspects:
+        for aspect in uncovered:
+            if not isinstance(aspect, dict):
+                valid_aspects = False
+                break
+            quote, explanation = aspect.get("requirement_quote"), aspect.get("reason")
+            if (not isinstance(quote, str) or not quote.strip()
+                    or _normalise_space(quote) not in _normalise_space(requirement["text"])
+                    or not isinstance(explanation, str) or not explanation.strip()):
+                valid_aspects = False
+                break
+    if (not valid_aspects or (judgment["status"] in {"partial", "not_met"} and not uncovered)
+            or (judgment["status"] == "direct" and uncovered)):
+        row["validation_code"] = "unanchored_gap"
+        row["justification"] = ("The claimed gap is not anchored to an actual requirement; assessment needs review."
+                                if language == "en" else "L'écart invoqué n'est pas rattaché à un aspect effectivement demandé ; évaluation à revoir.")
+        return row
     row.update(status=judgment["status"], evidence_ids=ids,
                evidence=[{"id": i, "text": known[i].get("text", ""),
                           "metadata": deepcopy(known[i].get("metadata", {}))} for i in ids],
-               justification=reason.strip(), assessment_valid=True)
+               justification=reason.strip(), uncovered_aspects=deepcopy(uncovered), assessment_valid=True)
     return row
 
 
@@ -286,6 +306,9 @@ def _check_hard_constraints(rows, requirements, language="fr"):
             if years is not None:
                 row["justification"] += f" Recorded duration: {years:g} years, with month-level date precision."
         row["assessment_valid"] = True
+        row.pop("validation_code", None)
+        row["uncovered_aspects"] = ([{"requirement_quote": requirement["text"], "reason": row["justification"]}]
+                                    if row["status"] == "not_met" else [])
         # Chronology source references are distinct from retrieved chunk IDs.
         row["source_references"] = check.get("references", [])
         row["evidence_ids"], row["evidence"] = [], []
@@ -310,6 +333,7 @@ def _summarize_matching(rows, language="fr"):
             "analysis_unavailable": unavailable,
             "analysis_message": (("The assessment could not be validated. Please retry; no score was calculated." if language == "en" else "L'évaluation n'a pas pu être validée. Relancez l'analyse ; aucun score n'a été calculé.") if unavailable else ""),
             "scoring_version": SCORING_VERSION,
+            "assessment_version": ASSESSMENT_VERSION,
             "scoring_weights": IMPORTANCE_WEIGHT.copy(), "scoring_credits": STATUS_CREDIT.copy(),
             "requirement_count": len(rows), "processed_count": len(rows),
             "assessed_count": assessed, "evaluated_count": evaluated,
@@ -325,13 +349,37 @@ def _summarize_matching(rows, language="fr"):
             "score_notice": ("Documented fit index, not a hiring probability. Unknown items add no points; missing documentation is not evidence of a lack of competence." if language == "en" else "Indice de correspondance documentée, pas une probabilité de recrutement. Les éléments inconnus n'apportent aucun point ; leur absence documentaire ne démontre pas une incompétence.")}
 
 
+def _parse_assessments(text, allowed):
+    data = _json_object(text).get("assessments")
+    if not isinstance(data, list):
+        raise ValueError("Missing assessments")
+    judgments, duplicates = {}, set()
+    for item in data:
+        if not isinstance(item, dict) or not isinstance(item.get("requirement_id"), str):
+            continue
+        identifier = item["requirement_id"]
+        if identifier not in allowed:
+            continue
+        if identifier in judgments:
+            duplicates.add(identifier)
+        judgments[identifier] = item
+    for identifier in duplicates:
+        judgments.pop(identifier, None)
+    return judgments
+
+
 def compute_matching(job_analysis, profile_context, language="fr"):
     requirements, llm = job_analysis.get("requirements", []), _get_llm_config()
     all_metrics, rows = [], []
     system = _DATA_POLICY + """Tu évalues chaque exigence reçue selon SES preuves.
 Retourne exactement une évaluation par requirement_id, sans changer l'importance.
-Statuts autorisés : direct (pratique/responsabilité pertinente explicitement
-attribuée), partial (transfert partiel, avec différence expliquée), training
+Évalue le niveau de rôle DEMANDÉ avant le statut de correspondance : piloter,
+coordonner, définir ou valider sont des activités produit à part entière ; coder,
+construire ou implémenter soi-même sont des activités de réalisation technique.
+DIRECT signifie que l'activité/responsabilité réellement demandée est démontrée.
+DIRECT ne signifie PAS nécessairement que le candidat a codé la solution.
+Statuts autorisés : direct (activité/responsabilité demandée explicitement
+attribuée), partial (aspect demandé seulement partiellement couvert), training
 (formation/prototype sans pratique professionnelle établie), historical
 (expérience passée dont l'actualité est explicitement incertaine), unknown
 (information insuffisante), not_met (non-respect explicitement établi).
@@ -340,6 +388,19 @@ Une responsabilité PO de validation/coordination est une contribution réelle,
 pas une compétence manquante si l'offre demande de piloter. Reconnais l'ensemble
 des expériences PO et la réalisation QA frontend/backend. Ne réduis pas le
 parcours à EPSA. Un pilotage de pipelines ne prouve pas leur développement.
+Inversement, l'absence de développement des pipelines n'est PAS un écart si
+l'exigence demande leur pilotage ou la vérification des transformations.
+Exemple : « Piloter la centralisation des données de plusieurs CRM et vérifier
+les règles de transformation » est DIRECT si ces responsabilités PO sont
+attribuées dans les preuves, même si les Data Engineers ont construit les flux.
+Si « développer soi-même les pipelines » est réellement demandé, il faut des
+preuves de cette pratique ; le seul pilotage ne suffit pas. Ne classe pas tout
+PO data en direct : compare chaque activité demandée à ses preuves.
+Pour partial/not_met, uncovered_aspects contient au moins un aspect demandé
+non couvert : requirement_quote est un extrait EXACT de CETTE exigence, et
+reason explique la limite des preuves sur CET extrait. N'ajoute pas une activité
+non demandée. Si tous les aspects demandés sont démontrés, le statut est direct.
+Pour direct, uncovered_aspects est vide. Un écart non documenté reste unknown.
 AWS ne prouve pas Azure ; Postman ne prouve pas des années avec Bruno.
 Ne déduis pas un niveau de langue (C2, bilingue, natif...) du seul nom de langue.
 Compare explicitement le niveau demandé aux informations sourcées disponibles.
@@ -350,7 +411,10 @@ constituent des sources acceptées ; ne les déclasse pas au seul motif de leur 
 Utilise exclusivement les identifiants du tableau evidence propre à l'exigence.
 Les références à une source vide ne sont pas permises. Pas de score calculé.
 JSON strict : {"assessments":[{"requirement_id":"R001","status":"direct",
-"evidence_ids":["C01"],"justification":"Responsabilité et exemple précis, avec limites utiles."}]}.
+"evidence_ids":["C01"],"uncovered_aspects":[],
+"justification":"Responsabilité et exemple précis, avec limites utiles."}]}.
+Pour un écart : "uncovered_aspects":[{"requirement_quote":"extrait exact de l'exigence reçue",
+"reason":"Limite constatée sur cette activité demandée."}].
 """ + ("Rédige les justifications en anglais." if language == "en" else "Rédige les justifications en français.")
     for start in range(0, len(requirements), BATCH_SIZE):
         batch = requirements[start:start + BATCH_SIZE]
@@ -362,26 +426,36 @@ JSON strict : {"assessments":[{"requirement_id":"R001","status":"direct",
                 user_content=json.dumps(payload, ensure_ascii=False),
                 max_tokens=max(4000, llm["max_tokens_matching"]), temperature=0)
             all_metrics.append(metrics)
-            data = _json_object(text).get("assessments")
-            if not isinstance(data, list):
-                raise ValueError("Missing assessments")
-            allowed, duplicates = {r["id"] for r in batch}, set()
-            for item in data:
-                if not isinstance(item, dict) or not isinstance(item.get("requirement_id"), str):
-                    continue
-                identifier = item["requirement_id"]
-                if identifier not in allowed:
-                    continue
-                if identifier in judgments:
-                    duplicates.add(identifier)
-                judgments[identifier] = item
-            for identifier in duplicates:
-                judgments.pop(identifier, None)
+            judgments = _parse_assessments(text, {r["id"] for r in batch})
         except (ValueError, TypeError, KeyError):
             judgments = {}
+        batch_rows = {r["id"]: _validate_judgment(r, judgments.get(r["id"]),
+                      profile_context.get(r["id"], []), language=language) for r in batch}
+        review = [r for r in batch if r["kind"] != "experience"
+                  and batch_rows[r["id"]].get("validation_code") == "unanchored_gap"]
+        if review:
+            # One targeted review, never automatic promotion to direct. A gap
+            # outside the actual requirement cannot be used as a scoring input.
+            repair_payload = {"job_title": job_analysis.get("titre", ""),
+                "requirements": [{**r, "evidence": profile_context.get(r["id"], []),
+                    "previous_assessment": judgments.get(r["id"]),
+                    "validation_feedback": batch_rows[r["id"]]["justification"]} for r in review]}
+            try:
+                text, metrics = llm_complete(model=llm["model"],
+                    system=system + "\nRevois uniquement ces évaluations invalides. Un écart doit porter sur une activité demandée ; ne conserve pas un écart de codage si seul le pilotage est demandé.",
+                    user_content=json.dumps(repair_payload, ensure_ascii=False),
+                    max_tokens=max(4000, llm["max_tokens_matching"]), temperature=0)
+                all_metrics.append(metrics)
+                repaired = _parse_assessments(text, {r["id"] for r in review})
+                for r in review:
+                    batch_rows[r["id"]] = _validate_judgment(r, repaired.get(r["id"]),
+                        profile_context.get(r["id"], []), language=language)
+            except Exception:
+                # Preserve the remaining valid matching if the optional review
+                # fails; unvalidated rows stay unknown and visibly unassessed.
+                pass
         for requirement in batch:
-            rows.append(_validate_judgment(requirement, judgments.get(requirement["id"]),
-                                          profile_context.get(requirement["id"], []), language=language))
+            rows.append(batch_rows[requirement["id"]])
     return _summarize_matching(_check_hard_constraints(rows, requirements, language=language), language=language), _merge_metrics(all_metrics)
 
 
@@ -444,6 +518,7 @@ def run_agent(job_text, response_type="email", language="fr"):
                   "experience_fingerprint": status.get("experience_fingerprint"),
                   "reference_fingerprint": status.get("reference_fingerprint"), "as_of": status.get("as_of"),
                   "scoring_version": SCORING_VERSION,
+                  "assessment_version": ASSESSMENT_VERSION,
                   "chunks_used": len({item["id"] for items in evidence.values() for item in items})}
     matching.update(provenance)
     result["matching"] = matching

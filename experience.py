@@ -239,8 +239,8 @@ def evaluate_experience_requirement(min_years, scope, as_of=None):
     duration = counted["years_and_months"]
     result["reason"] = (
         f"{SCOPE_LABELS[canonical]} : {months} mois documentés "
-        f"({duration['years']} ans et {duration['months']} mois), contre "
-        f"{minimum:g} ans demandés. Calcul par union des mois, sans double compte."
+        f"({duration['years']} {'an' if duration['years'] == 1 else 'ans'} et {duration['months']} mois), contre "
+        f"{minimum:g} {'an demandé' if minimum == 1 else 'ans demandés'}. Calcul par union des mois, sans double compte."
     )
     if result["includes_partial_current_month"]:
         result["reason"] += " Le mois courant commencé est inclus ; précision au mois."

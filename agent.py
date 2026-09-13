@@ -191,6 +191,8 @@ def analyze_job_posting(job_text):
 Liste TOUTES les exigences et responsabilités, y compris après les premières
 lignes et les compétences optionnelles. N'en sélectionne pas seulement cinq.
 Chaque text est un extrait EXACT du document, sans traduction ni reformulation.
+Conserve ses fautes, accents, casse, apostrophes et ponctuation : ne corrige pas
+la citation, même si le document est mal orthographié ou formulé brièvement.
 Une exigence par entrée ; évite de compter deux fois la même exigence.
 importance = optional seulement si explicitement optionnelle (apprécié, souhaité,
 nice to have...) ; sinon required. Ne rétrograde pas une exigence obligatoire.
@@ -216,15 +218,26 @@ Réponse : {"titre":"...","entreprise":null,"contexte":"...",
 "kind":"language","language":{"name":"anglais","level":"courant"}}]}.
 S'il n'existe aucune exigence exploitable, requirements est vide.
 """
-    metrics = {}
-    try:
-        text, metrics = llm_complete(model=llm["model"], system=system,
-            user_content=json.dumps({"job_document": job_text}, ensure_ascii=False),
-            max_tokens=12000, temperature=0)
-        return _validate_extraction(_json_object(text), job_text), metrics
-    except (ValueError, TypeError, KeyError) as exc:
-        return {"error": "Extraction invalide : les exigences n'ont pas pu être vérifiées.",
-                "validation_detail": str(exc)}, metrics
+    all_metrics, payload = [], {"job_document": job_text}
+    for attempt in range(2):
+        try:
+            text, metrics = llm_complete(model=llm["model"],
+                system=system + ("\nRelis l'extraction invalide en tenant compte du retour du validateur. Repars du document original ; retourne le JSON complet corrigé sans modifier les citations." if attempt else ""),
+                user_content=json.dumps(payload, ensure_ascii=False),
+                max_tokens=12000, temperature=0)
+        except Exception:
+            if not attempt:
+                raise  # Initial provider failures keep their existing caller handling.
+            return error, _merge_metrics(all_metrics)
+        all_metrics.append(metrics)
+        try:
+            return _validate_extraction(_json_object(text), job_text), _merge_metrics(all_metrics)
+        except (ValueError, TypeError, KeyError) as exc:
+            error = {"error": "Extraction invalide : les exigences n'ont pas pu être vérifiées.",
+                     "validation_detail": str(exc)}
+            payload = {"job_document": job_text, "previous_extraction": text,
+                       "validation_feedback": str(exc)}
+    return error, _merge_metrics(all_metrics)
 
 
 def query_rag_profile(requirements):

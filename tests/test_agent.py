@@ -208,6 +208,53 @@ class AgentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             agent._validate_extraction({"titre": "PO", "requirements": [requirement(text="Scrum"), requirement(2, text="Scrum")]}, "Scrum")
 
+    def test_extraction_repairs_typographic_normalization_without_weakening_exact_quotes(self):
+        source = "Product owner de 10 ans d'experience"
+        def extraction(quote):
+            return {"titre": "Product Owner", "requirements": [requirement(text=quote,
+                kind="experience", experience={"minimum_years": 10, "scope": "product_owner", "scope_text": quote})]}
+        for changed in (source.replace("d'", "d’"), source.replace("experience", "expérience"), source.replace("owner", "Owner")):
+            with self.subTest(changed=changed):
+                invalid = json.dumps(extraction(changed), ensure_ascii=False)
+                with patch.object(agent, "llm_complete", side_effect=[(invalid, METRICS),
+                        (json.dumps(extraction(source), ensure_ascii=False), METRICS)]) as llm:
+                    result, metrics = agent.analyze_job_posting(source)
+                self.assertEqual(result["requirements"][0]["text"], source)
+                self.assertEqual(result["requirements"][0]["experience"]["scope"], "product_owner")
+                self.assertEqual(llm.call_count, 2)
+                repair = json.loads(llm.call_args.kwargs["user_content"])
+                self.assertEqual(repair["job_document"], source)
+                self.assertEqual(repair["previous_extraction"], invalid)
+                self.assertIn("exact excerpt", repair["validation_feedback"])
+                self.assertNotIn(invalid, llm.call_args.kwargs["system"])
+                self.assertEqual(metrics["tokens_input"], 20)
+                self.assertEqual(metrics["tokens_output"], 10)
+
+    def test_extraction_json_repair_is_once_and_double_failure_remains_error(self):
+        with patch.object(agent, "llm_complete", side_effect=[("{invalid", METRICS), ("[]", METRICS)]) as llm:
+            result, metrics = agent.analyze_job_posting("Scrum")
+        self.assertEqual(llm.call_count, 2)
+        self.assertIn("error", result)
+        self.assertEqual(result["validation_detail"], "Expected a JSON object")
+        self.assertNotIn("requirements", result)
+        self.assertEqual(metrics["tokens_input"], 20)
+
+    def test_extraction_repair_provider_failure_keeps_first_validation_error(self):
+        with patch.object(agent, "llm_complete", side_effect=[("[]", METRICS),
+                RuntimeError("private provider diagnostics")]) as llm:
+            result, metrics = agent.analyze_job_posting("Scrum")
+        self.assertEqual(llm.call_count, 2)
+        self.assertIn("error", result)
+        self.assertEqual(result["validation_detail"], "Expected a JSON object")
+        self.assertNotIn("private provider", str(result))
+        self.assertEqual(metrics["tokens_input"], 10)
+
+    def test_initial_provider_failure_does_not_trigger_extraction_repair(self):
+        with patch.object(agent, "llm_complete", side_effect=RuntimeError("provider unavailable")) as llm:
+            with self.assertRaises(RuntimeError):
+                agent.analyze_job_posting("Scrum")
+        self.assertEqual(llm.call_count, 1)
+
     def test_experience_minimum_and_scope_are_bound_to_the_same_excerpt(self):
         examples = [
             ("8 ans comme PO", {"minimum_years": 1, "scope": "product_owner", "scope_text": "comme PO"}),

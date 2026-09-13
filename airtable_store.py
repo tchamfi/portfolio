@@ -10,6 +10,7 @@ BASE_ID = "appf02tzrzmTIHBza"
 CONFIG_TABLE = "tblGMmMaP8Z00HkLE"
 RECOS_TABLE = "tblayphpRLIXktphw"
 API_URL = "https://api.airtable.com/v0"
+MATCHING_CACHE_PREFIX = "__matching_cache_v1__:"
 
 def get_token():
     try: return st.secrets["AIRTABLE_TOKEN"]
@@ -21,7 +22,12 @@ def headers():
 def load_config():
     url = f"{API_URL}/{BASE_ID}/{CONFIG_TABLE}"
     try:
-        resp = requests.get(url, headers=headers(), params={"pageSize": 100}, timeout=10)
+        # Cache entries share this existing table, but are not editorial config.
+        # Filter before pagination so cached offers cannot crowd out profile fields.
+        resp = requests.get(url, headers=headers(), params={
+            "pageSize": 100,
+            "filterByFormula": f'LEFT({{Name}}, {len(MATCHING_CACHE_PREFIX)}) != "{MATCHING_CACHE_PREFIX}"',
+        }, timeout=10)
         resp.raise_for_status(); data = resp.json()
     except Exception as e:
         print(f"[airtable] load_config error: {e}"); return {}
@@ -30,6 +36,7 @@ def load_config():
     for rec in data.get("records", []):
         fields = rec.get("fields", {})
         key = fields.get("Name", "").strip(); val = fields.get("Notes", "")
+        if key.startswith(MATCHING_CACHE_PREFIX): continue
         if key: config[key] = val; record_ids[key] = rec["id"]
 
     for i in range(1, 5):
@@ -105,7 +112,7 @@ ANALYTICS_TABLE = "tblOMs2pa8UFK9UKY"
 
 def _versioned_response(response, metrics):
     """Keep provenance in the existing text field without changing Airtable schema."""
-    keys = ("corpus_version", "corpus_fingerprint", "experience_fingerprint", "reference_fingerprint", "experience_as_of", "as_of", "scoring_version", "assessment_version")
+    keys = ("corpus_version", "corpus_fingerprint", "experience_fingerprint", "reference_fingerprint", "experience_as_of", "as_of", "scoring_version", "assessment_version", "evaluation_key", "cache_origin", "extraction_version", "requirement_signature")
     context = {key: metrics[key] for key in keys if metrics.get(key)}
     prefix = "[Référentiel " + json.dumps(context, ensure_ascii=False) + "]\n" if context else ""
     return (prefix + (response or ""))[:5000]

@@ -8,7 +8,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
 from rag_pipeline import ask, create_chroma_collection, get_knowledge_status, get_evidence_by_ids
-from agent import run_agent, SCORING_VERSION, ASSESSMENT_VERSION
+from agent import SCORING_VERSION, ASSESSMENT_VERSION
+from matching_service import run_matching as run_agent
 from experience import experience_summary
 from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
@@ -835,6 +836,11 @@ if "matching" in tab_dict:
                     else:
                         st.warning("Une erreur est survenue pendant l'analyse. Merci de réessayer, ou de reformuler votre fiche de poste si le problème persiste." if lang=="fr" else "Something went wrong during the analysis. Please try again, or reformat your job posting if the issue persists.")
                 elif matching and not matching.get("error"):
+                    incomplete = (res.get("job_analysis") or {}).get("incomplete_excerpts", [])
+                    if incomplete:
+                        st.info(("Part of your offer is incomplete and was not evaluated: " if lang == "en"
+                                 else "Un passage de votre offre est incomplet et n’a pas été évalué : ")
+                                + " · ".join(incomplete))
                     score = matching.get("score_global")
                     requirements = matching.get("requirements", [])
                     requirement_count = len(requirements)

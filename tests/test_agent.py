@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import agent
@@ -67,12 +68,66 @@ class AgentTests(unittest.TestCase):
         reqs = [requirement(i) for i in range(1, 5)]
         payload = {"assessments": [judgment("R001"), judgment("R001"),
                     judgment("R002", evidence_ids=["C99"]), judgment("R004")]}
-        with patch.object(agent, "llm_complete", return_value=(json.dumps(payload), METRICS)):
+        with patch.object(agent, "llm_complete", return_value=(json.dumps(payload), METRICS)) as llm:
             result, _ = agent.compute_matching({"requirements": reqs}, {r["id"]: [evidence()] for r in reqs})
         self.assertEqual([r["status"] for r in result["requirements"]], ["unknown", "unknown", "unknown", "direct"])
-        self.assertEqual(result["score_global"], 25)
+        self.assertIsNone(result["score_global"])
+        self.assertTrue(result["analysis_unavailable"])
         self.assertEqual(result["coverage"], 25)
         self.assertEqual(result["processed_count"], 4)
+        self.assertEqual(llm.call_count, 2)
+        review = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        self.assertEqual([r["id"] for r in review], ["R001", "R002", "R003"])
+
+    def test_generic_repair_recovers_invalid_rows_without_reassessing_valid_unknown(self):
+        reqs = [requirement(i) for i in range(1, 6)]
+        first = {"assessments": [judgment("R001"), judgment("R001"),
+                 judgment("R002", evidence_ids=["C99"]), judgment("R004"),
+                 judgment("R005", status="unknown", evidence_ids=[])]}
+        repaired = {"assessments": [judgment("R001"), judgment("R002"), judgment("R003")]}
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps(first), METRICS), (json.dumps(repaired), METRICS)]) as llm:
+            result, metrics = agent.compute_matching({"requirements": reqs},
+                {r["id"]: [evidence()] for r in reqs})
+        review = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        self.assertEqual([r["id"] for r in review], ["R001", "R002", "R003"])
+        self.assertTrue(all(r["assessment_valid"] for r in result["requirements"]))
+        self.assertEqual([r["status"] for r in result["requirements"]],
+                         ["direct", "direct", "direct", "direct", "unknown"])
+        self.assertEqual(result["score_global"], 80)
+        self.assertFalse(result["analysis_unavailable"])
+        self.assertEqual(metrics["tokens_input"], 20)
+
+    def test_one_failed_batch_withholds_score_instead_of_lowering_candidate_fit(self):
+        reqs = [requirement(i) for i in range(1, 17)]
+        first = {"assessments": [judgment(r["id"]) for r in reqs[:8]]}
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps(first), METRICS), ("{broken", METRICS),
+                ("{still broken", METRICS)]) as llm:
+            result, metrics = agent.compute_matching({"requirements": reqs},
+                {r["id"]: [evidence()] for r in reqs})
+        self.assertEqual(llm.call_count, 3)
+        self.assertEqual(result["processed_count"], 16)
+        self.assertEqual(result["assessed_count"], 8)
+        self.assertEqual(result["assessment_coverage"], 50)
+        self.assertIsNone(result["score_global"])
+        self.assertTrue(result["analysis_unavailable"])
+        self.assertTrue(all(r["status"] == "direct" for r in result["requirements"][:8]))
+        repair = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        self.assertEqual([r["id"] for r in repair], [r["id"] for r in reqs[8:]])
+        self.assertEqual(metrics["tokens_input"], 30)
+
+    def test_repair_failure_does_not_expose_provider_details_or_publish_partial_score(self):
+        reqs = [requirement(), requirement(2)]
+        first = {"assessments": [judgment()]}
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps(first), METRICS), RuntimeError("private provider detail")]) as llm:
+            result, _ = agent.compute_matching({"requirements": reqs},
+                {r["id"]: [evidence()] for r in reqs})
+        self.assertEqual(llm.call_count, 2)
+        self.assertIsNone(result["score_global"])
+        self.assertEqual(result["assessed_count"], 1)
+        self.assertNotIn("private provider detail", str(result))
 
     def test_reference_from_another_requirement_is_not_a_valid_citation(self):
         row = agent._validate_judgment(requirement(), judgment(evidence_ids=["C02"]), [evidence("C01")])
@@ -237,6 +292,44 @@ class AgentTests(unittest.TestCase):
             agent._validate_extraction({"titre": "PO", "requirements": [requirement(text="AWS")]}, "Scrum")
         with self.assertRaises(ValueError):
             agent._validate_extraction({"titre": "PO", "requirements": [requirement(text="Scrum"), requirement(2, text="Scrum")]}, "Scrum")
+
+    def test_supplied_agile_offer_keeps_source_order_and_incomplete_text_out_of_scoring(self):
+        source = (Path(__file__).parent / "fixtures" / "po_agile_offer.txt").read_text(encoding="utf-8")
+        # A validated extraction fixture tests ordering/quote boundaries. It
+        # does not substitute mocked judgments for a live semantic acceptance.
+        labels = ("Roadmap produit :", "Cahiers des charges :", "Rapports d'avancement :",
+                  "Expertise produit :", "Gestion de backlog :", "Outils Agile :",
+                  "Communication :", "Analyse des besoins utilisateurs :",
+                  "Vision stratégique :", "Tests et validation :")
+        excerpts = [line for line in source.splitlines() if line.startswith(labels)]
+        fragment = "Connaissances techniques : Sensibilisation aux prat"
+        baseline = None
+        for ordered in (excerpts, list(reversed(excerpts))):
+            extraction = {"titre": "Product Owner", "contexte": "Organisation Agile structurée",
+                          "requirements": [requirement(i, text=text) for i, text in enumerate(ordered, 1)],
+                          "incomplete_excerpts": [fragment]}
+            with patch.object(agent, "llm_complete", return_value=(json.dumps(extraction), METRICS)):
+                result, _ = agent.analyze_job_posting(source)
+            self.assertEqual(result["incomplete_excerpts"], [fragment])
+            self.assertEqual(result["extraction_version"], agent.EXTRACTION_VERSION)
+            self.assertEqual([r["text"] for r in result["requirements"]], excerpts)
+            self.assertEqual([r["id"] for r in result["requirements"]],
+                             [f"R{i:03d}" for i in range(1, len(excerpts) + 1)])
+            self.assertEqual(sum("Jira, Trello, Azure DevOps" in r["text"] for r in result["requirements"]), 1)
+            self.assertNotIn(fragment, result["competences_requises"])
+            if baseline is not None:
+                self.assertEqual(result, baseline)
+            baseline = result
+
+    def test_incomplete_excerpt_requires_original_text_and_cannot_also_score(self):
+        source = "Scrum. Connaissances techniques : Sensibilisation aux prat"
+        valid = {"titre": "PO", "requirements": [requirement(text="Scrum")],
+                 "incomplete_excerpts": ["Connaissances techniques : Sensibilisation aux prat"]}
+        result = agent._validate_extraction(valid, source)
+        self.assertEqual(len(result["requirements"]), 1)
+        for fragment in ("Sensibilisation aux pratiques DevOps", "Scrum"):
+            with self.subTest(fragment=fragment), self.assertRaises(ValueError):
+                agent._validate_extraction({**valid, "incomplete_excerpts": [fragment]}, source)
 
     def test_extraction_repairs_typographic_normalization_without_weakening_exact_quotes(self):
         source = "Product owner de 10 ans d'experience"
@@ -443,6 +536,8 @@ class AgentTests(unittest.TestCase):
             matching, _ = agent.compute_matching({"requirements": [req]}, {}, language="en")
         self.assertIn("8 years in Product Ownership", matching["requirements"][0]["justification"])
         self.assertIn("Documented fit index", matching["score_notice"])
+        self.assertEqual(matching["score_global"], 100)
+        self.assertFalse(matching["analysis_unavailable"])
 
 
 if __name__ == "__main__":

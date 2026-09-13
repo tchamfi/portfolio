@@ -162,6 +162,17 @@ class AppIntegrationTests(unittest.TestCase):
                               else "moins que les 5 ans", summary)
                 self.assertNotIn("10 years" if language == "en" else "10 ans", summary)
 
+    def test_incomplete_offer_is_reported_without_exposing_private_method(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.session_state["agent_results"] = {"matching": {"score_global": 100, "requirements": [
+            {"text": "Backlog", "status": "direct", "importance": "required", "justification": "Je gère le backlog."}]},
+            "job_analysis": {"incomplete_excerpts": ["Connaissances techniques : Sensibilisation aux prat"]}}
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertTrue(any("incomplet" in item.value and "Sensibilisation aux prat" in item.value for item in app.info))
+        self.assertFalse(any("Sources et méthode" in item.label for item in app.expander))
+
     def test_new_assessment_version_clears_old_result_without_calling_model(self):
         app = self.app()
         app.session_state["current_tab"] = "matching"

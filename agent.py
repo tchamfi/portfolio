@@ -13,7 +13,8 @@ from rag_pipeline import get_knowledge_status, search_evidence
 TOP_K = 5
 BATCH_SIZE = 8
 SCORING_VERSION = "requirements-v1"
-ASSESSMENT_VERSION = "requested-role-v3"
+EXTRACTION_VERSION = "offer-structure-v2"
+ASSESSMENT_VERSION = "requested-role-v4"
 STATUS_CREDIT = {"direct": 1, "partial": .5, "training": .25,
                  "historical": .25, "unknown": 0, "not_met": 0}
 IMPORTANCE_WEIGHT = {"required": 3, "optional": 1}
@@ -170,9 +171,27 @@ def _validate_extraction(data, job_text):
                 raise ValueError("Language level must retain the offer's exact wording")
             row["language"] = {"name": lang["name"], "level": level}
         normalized.append(row)
+    # A model may emit the same requirements in another order. Keep IDs and
+    # assessment batch boundaries tied to the source, not that incidental order.
+    normalized.sort(key=lambda row: source.index(_normalise_space(row["text"])))
+    for index, row in enumerate(normalized, 1):
+        row["id"] = f"R{index:03d}"
+    incomplete = data.get("incomplete_excerpts", [])
+    if not isinstance(incomplete, list):
+        raise ValueError("Invalid incomplete excerpts")
+    for excerpt in incomplete:
+        if (not isinstance(excerpt, str) or not excerpt.strip()
+                or _normalise_space(excerpt) not in source):
+            raise ValueError("Incomplete text must be an exact excerpt of the offer")
+        if any(_normalise_space(excerpt) in _normalise_space(row["text"])
+               or _normalise_space(row["text"]) in _normalise_space(excerpt)
+               for row in normalized):
+            raise ValueError("An incomplete excerpt cannot also be a scored requirement")
     return {"titre": data["titre"],
             "entreprise": data.get("entreprise") if isinstance(data.get("entreprise"), str) else None,
             "contexte": data.get("contexte") if isinstance(data.get("contexte"), str) else "",
+            "extraction_version": EXTRACTION_VERSION,
+            "incomplete_excerpts": list(dict.fromkeys(text.strip() for text in incomplete)),
             "requirements": normalized,
             # Legacy display compatibility: these lists never drive the score.
             "competences_requises": [r["text"] for r in normalized if r["importance"] == "required"],
@@ -193,7 +212,27 @@ lignes et les compétences optionnelles. N'en sélectionne pas seulement cinq.
 Chaque text est un extrait EXACT du document, sans traduction ni reformulation.
 Conserve ses fautes, accents, casse, apostrophes et ponctuation : ne corrige pas
 la citation, même si le document est mal orthographié ou formulé brièvement.
-Une exigence par entrée ; évite de compter deux fois la même exigence.
+Le contexte de l'organisation et la composition de l'équipe ne sont PAS des
+exigences du candidat : nombre de développeurs, présence d'un architecte, d'un
+Scrum Master ou d'un référent qualification restent dans contexte. Une capacité
+explicitement demandée de coordination de ces acteurs reste une exigence.
+Une capacité ou responsabilité distincte par entrée, dans l'ordre du document.
+Les répétitions entre description, livrables et profil recherché ne créent pas
+des critères supplémentaires : pour la même capacité, garde l'extrait exact le
+plus complet. Exemple : responsabilité du backlog, livraison du backlog et
+gestion/priorisation du backlog sont un seul critère, décrit par l'extrait le
+plus riche. Préserve toutefois les responsabilités réellement distinctes et
+les contraintes supplémentaires ; ne fusionne pas tout le rôle PO en un critère.
+Garde une liste d'outils appartenant à une même compétence dans UNE entrée,
+avec sa phrase complète et sa ponctuation. Ne transforme pas aléatoirement
+« Outils Agile (Jira, Trello, Azure DevOps) » en trois exigences pondérées.
+Conserve les mots qui indiquent une obligation cumulative (et, tous), une
+alternative (ou, l'un de) ou des exemples (par exemple, tels que). Des virgules
+ou parenthèses seules ne suffisent pas à inventer une relation ET ou OU.
+Ne complète jamais un passage tronqué. Si un fragment ne permet pas d'identifier
+la compétence ou contrainte demandée (ex. « Sensibilisation aux prat »), place
+son extrait exact dans incomplete_excerpts, sans critère ni points associés.
+Un intitulé court mais complet comme « Scrum » reste une exigence exploitable.
 importance = optional seulement si explicitement optionnelle (apprécié, souhaité,
 nice to have...) ; sinon required. Ne rétrograde pas une exigence obligatoire.
 kind = skill, experience (durée minimale explicite), language ou constraint.
@@ -210,7 +249,7 @@ jamais sous skill ou constraint. Une durée qualifiée (ex. « 8 ans comme Produ
 Owner sur Azure » ou « 5 ans PO dans la banque ») est tool/domain/unspecified,
 pas product_owner global. Ne retire pas le qualificatif de l'extrait text.
 Pour une langue, conserve le niveau exact demandé, ou null s'il n'est pas précisé.
-Réponse : {"titre":"...","entreprise":null,"contexte":"...",
+Réponse : {"titre":"...","entreprise":null,"contexte":"...","incomplete_excerpts":[],
 "requirements":[{"text":"extrait exact","importance":"required",
 "kind":"skill"},{"text":"8 ans comme PO","importance":"required",
 "kind":"experience","experience":{"minimum_years":8,"scope":"product_owner",
@@ -341,10 +380,14 @@ def _summarize_matching(rows, language="fr"):
     attention = [r for r in rows if r["status"] != "direct"]
     assessed = sum(r["assessment_valid"] for r in rows)
     evaluated = sum(r["assessment_valid"] and r["status"] != "unknown" for r in rows)
-    unavailable = bool(rows) and assessed == 0
+    # A provider/validation failure is not evidence of a missing competence.
+    # Never publish a lower fit score merely because one batch failed while
+    # another succeeded. Valid "unknown" judgments still count in the score.
+    unavailable = bool(rows) and assessed != len(rows)
     return {"requirements": rows, "score_global": None if unavailable else _compute_score(rows),
             "analysis_unavailable": unavailable,
-            "analysis_message": (("The assessment could not be validated. Please retry; no score was calculated." if language == "en" else "L'évaluation n'a pas pu être validée. Relancez l'analyse ; aucun score n'a été calculé.") if unavailable else ""),
+            "analysis_message": (("Some criteria could not be assessed reliably. Please retry; no score was calculated." if language == "en" else "Certains critères n'ont pas pu être évalués de façon fiable. Relancez l'analyse ; aucun score n'a été calculé.") if unavailable else ""),
+            "extraction_version": EXTRACTION_VERSION,
             "scoring_version": SCORING_VERSION,
             "assessment_version": ASSESSMENT_VERSION,
             "scoring_weights": IMPORTANCE_WEIGHT.copy(), "scoring_credits": STATUS_CREDIT.copy(),
@@ -415,6 +458,14 @@ reason explique la limite des preuves sur CET extrait. N'ajoute pas une activit�
 non demandée. Si tous les aspects demandés sont démontrés, le statut est direct.
 Pour direct, uncovered_aspects est vide. Un écart non documenté reste unknown.
 AWS ne prouve pas Azure ; Postman ne prouve pas des années avec Bruno.
+Pour une liste d'outils, respecte uniquement la relation réellement exprimée :
+« et/tous » exige chaque outil ; « ou/l'un de » permet une alternative ;
+« par exemple/tels que » illustre la compétence générale. Une simple liste
+entre parenthèses n'autorise ni à exiger arbitrairement chaque outil ni à
+considérer arbitrairement qu'un seul suffit. Si le statut dépend de cette
+ambiguïté, utilise unknown et précise le point à confirmer. Cite les pratiques
+étayées sans attribuer les autres outils. La présence d'un outil dans un
+environnement ne prouve pas à elle seule la maîtrise de toutes ses fonctions.
 Ne déduis pas un niveau de langue (C2, bilingue, natif...) du seul nom de langue.
 Compare explicitement le niveau demandé aux informations sourcées disponibles.
 Une langue non documentée est unknown, jamais une absence de maîtrise prouvée.
@@ -466,17 +517,18 @@ Pour un écart : "uncovered_aspects":[{"requirement_quote":"extrait exact de l'e
         batch_rows = {r["id"]: _validate_judgment(r, judgments.get(r["id"]),
                       profile_context.get(r["id"], []), language=language) for r in batch}
         review = [r for r in batch if r["kind"] != "experience"
-                  and batch_rows[r["id"]].get("validation_code") == "unanchored_gap"]
+                  and not batch_rows[r["id"]]["assessment_valid"]]
         if review:
-            # One targeted review, never automatic promotion to direct. A gap
-            # outside the actual requirement cannot be used as a scoring input.
+            # One targeted repair for every invalid assessment, including
+            # missing/duplicate IDs, invalid JSON and ungrounded references.
+            # Already valid judgments and deterministic tenure checks stay put.
             repair_payload = {"job_title": job_analysis.get("titre", ""),
                 "requirements": [{**r, "evidence": profile_context.get(r["id"], []),
                     "previous_assessment": judgments.get(r["id"]),
                     "validation_feedback": batch_rows[r["id"]]["justification"]} for r in review]}
             try:
                 text, metrics = llm_complete(model=llm["model"],
-                    system=system + "\nRevois uniquement ces évaluations invalides. Un écart doit porter sur une activité demandée ; ne conserve pas un écart de codage si seul le pilotage est demandé.",
+                    system=system + "\nCorrige uniquement ces évaluations invalides en suivant le retour du validateur. Retourne exactement une évaluation complète par identifiant reçu, avec des références propres à cette exigence. Un écart doit porter sur une activité demandée ; ne conserve pas un écart de codage si seul le pilotage est demandé. Ne change pas un statut en direct pour seulement faire passer la validation : l'information réellement insuffisante reste unknown.",
                     user_content=json.dumps(repair_payload, ensure_ascii=False),
                     max_tokens=max(4000, llm["max_tokens_matching"]), temperature=0)
                 all_metrics.append(metrics)
@@ -485,8 +537,8 @@ Pour un écart : "uncovered_aspects":[{"requirement_quote":"extrait exact de l'e
                     batch_rows[r["id"]] = _validate_judgment(r, repaired.get(r["id"]),
                         profile_context.get(r["id"], []), language=language)
             except Exception:
-                # Preserve the remaining valid matching if the optional review
-                # fails; unvalidated rows stay unknown and visibly unassessed.
+                # Preserve valid rows for diagnostics, but the summary withholds
+                # the score while any assessment remains unvalidated.
                 pass
         for requirement in batch:
             rows.append(batch_rows[requirement["id"]])

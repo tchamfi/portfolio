@@ -20,14 +20,39 @@ _SEARCH_ALIASES = (
     (r"\b(data|donnees|crm)\b", "data données transformation CRM plateforme"),
     (r"\b(transformation|transformations|ingestion|pipelines?)\b", "règles transformation validation pipelines rôle Product Owner"),
     (r"\b(hr|rh|onboarding|offboarding|adoption)\b", "application RH onboarding offboarding recette production adoption"),
-    (r"\b(experience|career|parcours|years|ans|long|depuis)\b", "expérience parcours années durée Product Owner QA"),
+    (r"\b(experience|career|parcours|years|ans|how long|combien de temps|depuis)\b", "expérience parcours années durée Product Owner QA"),
     (r"\b(certification[s]?|education|training|studies|diplome[s]?)\b", "certifications formation diplôme études"),
     (r"\b(pentest[s]?|penetration|security|securite)\b", "sécurité coordination tests intrusion droits accès"),
 )
 
+# Each concept connects a requirement's vocabulary to an existing skill heading.
+# It only improves recall: the complete block, including its limits, still goes
+# through the ordinary evidence-based assessment. No competency ID or status is
+# fabricated, and unrelated queries retain their original TF-IDF ranking.
+_PO_SEARCH_CONCEPTS = (
+    (r"\b(backlogs?|user stor(?:y|ies)|criteres? d[’']acceptation|acceptance criteria)\b",
+     r"\bbacklog\b", "user stories critères acceptation backlog management"),
+    (r"\b(prioris\w*|priorit\w*|wsjf|arbitrages?|trade[ -]offs?|valeur metier|business value)\b",
+     r"\b(priorisation wsjf|arbitrages produit)\b", "priorisation WSJF arbitrages produit backlog"),
+    (r"\b(roadmaps?|feuilles? de route|release planning|plans? de release)\b",
+     r"\broadmap\b", "roadmap release planning delivery"),
+    (r"\b(cahiers? des charges|specifications?|analyse des besoins|analyser les besoins|"
+     r"besoins (?:metiers?|utilisateurs?)|business analysis|requirements analysis|user needs)\b",
+     r"\banalyse des besoins\b", "analyse besoins spécifications fonctionnelles business analysis"),
+    (r"\b(recette|uat|tests? utilisateurs?|user (?:acceptance )?test(?:s|ing)?|acceptance test(?:s|ing)?|"
+     r"(?:valid\w*|accept\w*) (?:les |des )?(?:livrables?|versions?|fonctionnalites?|deliverables?|releases?))\b",
+     r"\b(recette fonctionnelle|strategies et plans de test)\b",
+     "recette fonctionnelle validation versions UAT acceptance testing stratégies plans test"),
+)
+
+def _normalize_search_text(text):
+    return "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
+
 def _expand_query(question):
-    normalized = "".join(c for c in unicodedata.normalize("NFKD", question.lower()) if not unicodedata.combining(c))
-    return question + " " + " ".join(words for pattern, words in _SEARCH_ALIASES if re.search(pattern, normalized))
+    normalized = _normalize_search_text(question)
+    aliases = [words for pattern, words in _SEARCH_ALIASES if re.search(pattern, normalized)]
+    aliases.extend(words for pattern, _, words in _PO_SEARCH_CONCEPTS if re.search(pattern, normalized))
+    return question + " " + " ".join(aliases)
 
 def _ensure_index(force=False):
     """Atomically publish a full snapshot and detect content changes on every call."""
@@ -78,6 +103,15 @@ def _search_evidence(snapshot, query, top_k):
         return []
     vector = snapshot["vectorizer"].transform([_expand_query(query)])
     similarities = cosine_similarity(vector, snapshot["matrix"]).flatten()
+    headings = [heading for pattern, heading, _ in _PO_SEARCH_CONCEPTS
+                if re.search(pattern, _normalize_search_text(query))]
+    for i, chunk in enumerate(snapshot["chunks"]):
+        metadata = chunk["metadata"]
+        title = _normalize_search_text(metadata.get("title", ""))
+        if metadata.get("category") == "skill" and any(re.search(heading, title) for heading in headings):
+            # A bounded heading boost stops generic prose in a verbose offer
+            # from displacing the explicitly relevant capability block.
+            similarities[i] = min(1.0, similarities[i] + 0.18)
     indices = sorted(range(len(similarities)), key=lambda i: (-float(similarities[i]), snapshot["chunks"][i]["id"]))
     results = []
     for idx in indices:

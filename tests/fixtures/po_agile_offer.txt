@@ -1,0 +1,42 @@
+Le Product Owner évolue au sein d’une organisation Agile structurée, en collaboration étroite avec une équipe composée de :
+
+2 équipes de développement de 3 personnes
+
+1 architecte
+
+1 Scrum Master
+
+1 référent qualification
+
+Description
+
+Il est responsable du Product Backlog. Il s’assure que la direction métier prise est la bonne, les priorités respectées suivant un critère de valeur métier, et que la qualité des livrables de chaque cycle agile est en adéquation avec les attentes du métier. Il est capable de prendre des décisions sur le périmètre du besoin métier, en cohérence avec le rythme de développement choisi par l’équipe.
+
+Livrables
+
+Backlog produit : Liste priorisée des fonctionnalités et des exigences du produit.
+
+Roadmap produit : Plan stratégique décrivant les évolutions du produit sur le long terme.
+
+Cahiers des charges : Spécifications détaillées des fonctionnalités et des exigences techniques.
+
+Rapports d'avancement : Suivi de l'état du développement et mise à jour des parties prenantes.
+
+Validation des livrables : Évaluation et acceptation des fonctionnalités développées avant leur mise en production.
+
+Profil recherché
+Expertise produit : Compréhension approfondie du marché, des utilisateurs et de la concurrence.
+
+Gestion de backlog : Capacité à définir, prioriser et gérer le backlog produit de manière efficace.
+
+Outils Agile : Maîtrise des outils de gestion de projet Agile (Jira, Trello, Azure DevOps).
+
+Communication : Excellentes compétences interpersonnelles pour interagir avec les parties prenantes et l'équipe de développement.
+
+Analyse des besoins utilisateurs : Capacité à recueillir et à analyser les besoins des utilisateurs pour les traduire en fonctionnalités.
+
+Vision stratégique : Aptitude à aligner les développements du produit avec les objectifs business de l'entreprise.
+
+Tests et validation : Compétences pour participer aux tests utilisateurs et valider les livrables avant leur lancement.
+
+Connaissances techniques : Sensibilisation aux prat

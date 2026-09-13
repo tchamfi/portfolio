@@ -6,12 +6,13 @@ import re, json, time
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
-from rag_pipeline import ask, create_chroma_collection
-from agent import run_agent
+from rag_pipeline import ask, create_chroma_collection, get_knowledge_status, get_evidence_by_ids
+from agent import run_agent, SCORING_VERSION
+from experience import experience_summary
 from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
 from config import (get_private_code, FALLBACK_CONFIG, WELCOME_FR, WELCOME_EN,
-                    CHEVRON_SVG, get_config_context, swap)
+                    CHEVRON_SVG, get_operational_context, swap)
 
 st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷", layout="wide", initial_sidebar_state="collapsed")
 
@@ -88,8 +89,15 @@ st.markdown(TAB_JS, unsafe_allow_html=True)
 
 
 # --- Init ---
-if "db_initialized" not in st.session_state:
-    with st.spinner(""): create_chroma_collection(); st.session_state.db_initialized=True
+try:
+    knowledge_status = get_knowledge_status()
+except Exception:
+    st.error("La base de compétences est temporairement indisponible. Merci de réessayer ultérieurement.")
+    st.stop()
+if st.session_state.get("knowledge_fingerprint") != knowledge_status["reference_fingerprint"]:
+    st.session_state.pop("agent_results", None)
+    st.session_state.pop("agent_error", None)
+    st.session_state.knowledge_fingerprint = knowledge_status["reference_fingerprint"]
 if "is_private" not in st.session_state: st.session_state.is_private=False
 if "admin_view" not in st.session_state: st.session_state.admin_view=False
 if "lang" not in st.session_state: st.session_state.lang="fr"
@@ -174,13 +182,18 @@ if st.session_state.admin_view:
             st.markdown("**English**")
             new_p1en=st.text_area("P1 EN",value=cfg.get("profil_p1_en",""),key="a_p1en",height=90); new_p2en=st.text_area("P2 EN",value=cfg.get("profil_p2_en",""),key="a_p2en",height=90); new_p3en=st.text_area("P3 EN",value=cfg.get("profil_p3_en",""),key="a_p3en",height=90); new_p4en=st.text_area("P4 EN",value=cfg.get("profil_p4_en",""),key="a_p4en",height=90)
         st.markdown("---")
-        st.markdown("**Références pour le matching**")
-        st.caption("Utilisées par l'agent de matching pour vérifier l'expérience et les langues demandées dans une fiche de poste, indépendamment du jugement du modèle.")
-        pc3,pc4=st.columns(2)
-        with pc3:
-            new_annees_exp=st.number_input("Années d'expérience", 0, 60, int(cfg.get("annees_experience",15)), 1, key="a_annees_exp")
-        with pc4:
-            new_langues=st.text_input("Langues maîtrisées (séparées par une virgule)", value=cfg.get("langues_maitrisees","Français,Anglais"), key="a_langues")
+        st.markdown("**Base de compétences et expérience**")
+        st.caption("Les durées sont calculées par rôle à partir des missions datées, sans double comptage. Les langues sont évaluées sur les sources V3.")
+        experience_data = experience_summary()
+        st.json({"version": knowledge_status["version"], "empreinte": knowledge_status["fingerprint"],
+                 "indexation_UTC": knowledge_status["indexed_at"], "blocs": knowledge_status["counts"],
+                 "bareme": SCORING_VERSION})
+        st.dataframe([{"Périmètre": scope, "Mois": value["months"], "Durée": f"{value['years_and_months']['years']} ans {value['years_and_months']['months']} mois"}
+                      for scope, value in experience_data["scopes"].items()], hide_index=True, use_container_width=True)
+        st.caption("Précision mensuelle : le mois en cours est inclus. Source des dates : knowledge/experience.json.")
+        if st.button("Reconstruire l’index", key="rebuild_knowledge"):
+            create_chroma_collection(force=True)
+            st.rerun()
 
     with at4:
         mc1,mc2=st.columns(2)
@@ -504,21 +517,13 @@ if st.session_state.admin_view:
             st.markdown("**Matching / Agent**")
             new_llm_temp_match = st.slider("Température matching", 0.0, 2.0, float(cfg.get("llm_temp_matching", "0.2")), 0.1, key="llm_tm", help="0.2 = stable avec nuance. 0 = identique à chaque fois")
             new_llm_max_match = st.number_input("Max tokens matching", 512, 4096, int(cfg.get("llm_max_tokens_matching", "1500")), 128, key="llm_mm", help="Longueur max de l'email/pitch généré")
-            severity_opts = ["stricte", "equilibree", "souple"]
-            severity_labels = {"stricte": "Stricte", "equilibree": "Équilibrée (recommandé)", "souple": "Souple"}
-            cur_severity = cfg.get("llm_matching_severity", "equilibree")
-            new_llm_severity = st.selectbox(
-                "Sévérité du matching", severity_opts,
-                index=severity_opts.index(cur_severity) if cur_severity in severity_opts else 1,
-                format_func=lambda k: severity_labels[k], key="llm_sev",
-                help="Change le poids de chaque compétence manquante dans le calcul du score (pas la façon dont le modèle les classe, qui reste identique). Stricte = chaque gap pèse plus lourd, score plus sévère. Équilibrée = réglage par défaut. Souple = chaque gap pèse moins, score plus généreux."
-            )
+            st.caption(f"Barème fixe et versionné : {SCORING_VERSION}. Chaque exigence est évaluée ; les informations manquantes restent visibles.")
         st.markdown("---")
         st.markdown("**Résumé de la configuration active**")
-        st.markdown(f'<div style="background:#f8fafc;border-radius:12px;padding:16px;border:1px solid #e2e8f0;font-size:.85rem;line-height:1.8"><strong>Modèle :</strong> {new_llm_model}<br><strong>Chat :</strong> temp={new_llm_temp_chat}, max_tokens={new_llm_max_chat}, TOP_K={new_llm_top_k}<br><strong>Matching :</strong> temp={new_llm_temp_match}, max_tokens={new_llm_max_match}, sévérité={severity_labels[new_llm_severity]}</div>', unsafe_allow_html=True)
+        st.write({"Modèle": new_llm_model, "Chat": {"température": new_llm_temp_chat, "max_tokens": new_llm_max_chat, "TOP_K": new_llm_top_k}, "Matching": {"température": new_llm_temp_match, "max_tokens": new_llm_max_match, "barème": SCORING_VERSION}})
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
-        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"llm_matching_severity":new_llm_severity,"annees_experience":new_annees_exp,"langues_maitrisees":new_langues,"_record_ids":cfg.get("_record_ids",{})}
+        nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"_record_ids":cfg.get("_record_ids",{})}
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
         st.session_state.admin_exp=new_exp; st.session_state.admin_cs=new_cs
         st.session_state.messages=[{"role":"assistant","content":WELCOME_FR}]
@@ -733,11 +738,12 @@ function alScrollToChatBottom(){
 </script>""", height=0)
         if sent and typed:
             st.session_state.messages.append({"role":"user","content":typed})
-            try: resp, metrics = ask(typed+get_config_context())
-            except Exception as e: resp, metrics = f"Error: {e}", {}
-            try: log_chat(typed, resp, lang=lang, chunks_used=12, metrics=metrics)
+            try: resp, metrics = ask(typed, language=lang, operational_context=get_operational_context())
+            except Exception:
+                resp, metrics = ("The response could not be generated. Please try again." if lang == "en" else "La réponse n’a pas pu être générée. Merci de réessayer."), {}
+            try: log_chat(typed, resp, lang=lang, chunks_used=metrics.get("chunks_used",0), metrics=metrics)
             except: pass
-            st.session_state.messages.append({"role":"assistant","content":resp}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
+            st.session_state.messages.append({"role":"assistant","content":resp,"corpus_version":metrics.get("corpus_version"),"evidence_ids":metrics.get("evidence_ids",[])}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
 
 # --- TAB 3 : MATCHING ---
 if "matching" in tab_dict:
@@ -761,7 +767,7 @@ if "matching" in tab_dict:
             if run and job.strip():
                 with st.spinner("..."):
                     try:
-                        st.session_state.agent_results=run_agent(job,rtype)
+                        st.session_state.agent_results=run_agent(job,rtype,language=lang)
                         st.session_state.pop("agent_error", None)
                     except Exception as e:
                         st.session_state.pop("agent_results", None)
@@ -769,7 +775,7 @@ if "matching" in tab_dict:
                 if "agent_results" in st.session_state:
                     try:
                         _res=st.session_state.agent_results; _m=_res.get("matching",{})
-                        log_matching(job[:2000], _res.get("response",""), score=_m.get("score_global",0), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=15, email=visitor_email, metrics=_res.get("metrics",{}))
+                        log_matching(job[:2000], _res.get("response") or "", score=_m.get("score_global"), job_title=_res.get("job_analysis",{}).get("titre",""), lang=lang, chunks_used=_res.get("metrics",{}).get("chunks_used",0), email=visitor_email, metrics=_res.get("metrics",{}))
                     except: pass
             if st.session_state.get("agent_error"):
                 if is_private:
@@ -785,57 +791,70 @@ if "matching" in tab_dict:
                     else:
                         st.warning("Une erreur est survenue pendant l'analyse. Merci de réessayer, ou de reformuler votre fiche de poste si le problème persiste." if lang=="fr" else "Something went wrong during the analysis. Please try again, or reformat your job posting if the issue persists.")
                 elif matching and not matching.get("error"):
-                    score=matching.get("score_global",0)
-                    sc="low" if score<50 else ("mid" if score<70 else ("good" if score<=90 else "high"))
-                    sc_col="#c2666a" if score<50 else ("#c2842a" if score<70 else ("#4ade80" if score<=90 else "#15803d"))
-                    # Circular score
-                    st.markdown(f'<div style="text-align:center;padding:1.5rem 0"><div style="display:inline-flex;align-items:center;justify-content:center;width:120px;height:120px;border-radius:50%;background:conic-gradient({sc_col} 0% {score}%, #e2e8f0 {score}% 100%);position:relative"><div style="width:96px;height:96px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;flex-direction:column"><div style="font-size:2.2rem;font-weight:900;color:{sc_col}">{score}</div><div style="font-size:.7rem;color:#94a3b8">/100</div></div></div></div>', unsafe_allow_html=True)
-                    # Points forts — always visible
+                    score = matching.get("score_global")
+                    if score is None:
+                        if matching.get("requirements"):
+                            st.warning("The assessment is unavailable. Please try again; no score has been assigned." if lang == "en" else "L’évaluation est indisponible. Merci de réessayer ; aucun score n’a été attribué.")
+                        else:
+                            st.info("No evaluable requirement was found." if lang == "en" else "Aucune exigence exploitable n’a été identifiée.")
+                    else:
+                        st.metric("Documented fit" if lang == "en" else "Adéquation documentée", f"{score}/100")
+                    st.caption("This score reflects the documented requirements, not a hiring probability." if lang == "en" else "Ce score synthétise les exigences documentées ; ce n’est pas une probabilité d’embauche.")
+                    status_labels = {
+                        "direct": "Direct match" if lang == "en" else "Correspondance directe",
+                        "partial": "Partial match" if lang == "en" else "Correspondance partielle",
+                        "training": "Training" if lang == "en" else "Formation",
+                        "historical": "Historical experience" if lang == "en" else "Expérience historique",
+                        "unknown": "To clarify" if lang == "en" else "À préciser",
+                        "not_met": "Not met" if lang == "en" else "Non satisfait",
+                    }
                     if matching.get("points_forts"):
-                        st.markdown('<div class="gap-section-title" style="color:#16a34a">Points forts</div>', unsafe_allow_html=True)
-                        for p in matching.get("points_forts",[]):
-                            st.markdown(f'<div class="pt-fort">{p}</div>',unsafe_allow_html=True)
-                    # Visibilite publique par palier :
-                    # < 50   -> gaps_imperatifs (bloquants)
-                    # 50-69  -> points_attention + gaps_apprecies (bon match, reserves visibles)
-                    # 70-90  -> points_attention seul (bon match, juste une nuance)
-                    # > 90   -> rien de plus (points_forts deja affiches ci-dessus)
-                    # L'admin voit toujours tout, quel que soit le score.
-                    show_gaps_imp_public = score < 50
-                    show_gaps_app_public = (not is_private) and 50 <= score < 70
-                    show_attention_public = (not is_private) and 50 <= score <= 90
-                    show_gaps = is_private or show_gaps_imp_public
-                    if show_gaps:
-                        gaps_imp = matching.get("gaps_imperatifs", [])
-                        gaps_app = matching.get("gaps_apprecies", [])
-                        if gaps_imp and (is_private or show_gaps_imp_public):
-                            st.markdown('<div class="gap-section-title" style="color:#c2666a">Compétences manquantes (requises)</div>', unsafe_allow_html=True)
-                            for g in gaps_imp:
-                                st.markdown(f'<div class="pt-gap-red">{g}</div>', unsafe_allow_html=True)
-                        if gaps_app and (is_private or show_gaps_imp_public):
-                            st.markdown('<div class="gap-section-title" style="color:#d97706">Compétences manquantes (appréciées)</div>', unsafe_allow_html=True)
-                            for g in gaps_app:
-                                st.markdown(f'<div class="pt-gap-orange">{g}</div>', unsafe_allow_html=True)
-                        if score < 50 and not is_private:
-                            msg_honesty = "This role requires skills I haven't developed yet, but here's what I bring to the table." if lang=="en" else "Ce poste nécessite des compétences que je n'ai pas encore développées, mais voici ce que j'apporte."
-                            st.markdown(f'<div style="background:rgba(99,102,241,.04);border-radius:12px;padding:12px 16px;margin-top:12px;font-size:.85rem;color:#64748b;font-style:italic">{msg_honesty}</div>', unsafe_allow_html=True)
-                    if show_gaps_app_public and matching.get("gaps_apprecies"):
-                        st.markdown('<div class="gap-section-title" style="color:#d97706">Compétences manquantes (appréciées)</div>', unsafe_allow_html=True)
-                        for g in matching.get("gaps_apprecies", []):
-                            st.markdown(f'<div class="pt-gap-orange">{g}</div>', unsafe_allow_html=True)
-                    if show_attention_public and matching.get("points_attention"):
-                        st.markdown('<div class="gap-section-title" style="color:#d97706">Points d\'attention</div>', unsafe_allow_html=True)
-                        for p in matching.get("points_attention",[]):
-                            st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
-                    # Admin extras
+                        st.markdown("**Strengths**" if lang == "en" else "**Points forts**")
+                        for item in matching["points_forts"]:
+                            st.write("• " + item)
+                    if matching.get("points_attention"):
+                        st.markdown("**Points to consider**" if lang == "en" else "**Points d’attention**")
+                        for item in matching["points_attention"]:
+                            st.write("• " + item)
+                    requirements = matching.get("requirements", [])
+                    unknown_count = sum(r.get("status") == "unknown" for r in requirements)
+                    st.caption((f"{len(requirements)} requirements processed · {unknown_count} to clarify" if lang == "en"
+                                else f"{len(requirements)} exigences traitées · {unknown_count} à préciser"))
+                    for requirement in requirements:
+                        label = status_labels.get(requirement.get("status"), status_labels["unknown"])
+                        importance = ("Optional" if lang == "en" else "Optionnel") if requirement.get("importance") == "optional" else ("Required" if lang == "en" else "Requis")
+                        title = f"{requirement.get('requirement_id', requirement.get('id', ''))} · {requirement.get('text', '')} — {label}"
+                        # All reservations remain visible independently of the global score.
+                        with st.expander(title, expanded=requirement.get("status") in {"unknown", "not_met"}):
+                            st.caption(importance)
+                            st.write(requirement.get("justification", ""))
+                            ids = requirement.get("evidence_ids", [])
+                            if ids:
+                                st.caption(("Evidence: " if lang == "en" else "Références : ") + ", ".join(ids))
+                                for evidence in requirement.get("evidence", []):
+                                    if evidence.get("text"):
+                                        st.markdown(evidence["text"])
+                            if requirement.get("experience_check"):
+                                check = requirement["experience_check"]
+                                st.caption(("Source: dated career history · " if lang == "en" else "Source : parcours daté · ") + ", ".join(check.get("references", [])))
+                                if is_private:
+                                    st.json(check)
+                    corpus_version = matching.get("corpus_version", res.get("corpus_version", knowledge_status["version"]))
+                    corpus_hash = matching.get("corpus_fingerprint", res.get("corpus_fingerprint", knowledge_status["fingerprint"]))
+                    scoring_version = matching.get("scoring_version", SCORING_VERSION)
+                    with st.expander("Method and reference" if lang == "en" else "Méthode et référentiel"):
+                        st.write("Required requirements carry more weight than optional ones. Direct, partial, training and historical matches are distinguished; missing information earns no coverage points." if lang == "en" else "Les exigences requises pèsent davantage que les options. Le barème distingue correspondance directe, partielle, formation et expérience historique ; une information manquante ne rapporte aucun point de couverture.")
+                        st.caption("Weights: required 3, optional 1. Credit: direct 100%, partial 50%, training/historical 25%, unknown/not met 0%." if lang == "en" else "Poids : requis 3, optionnel 1. Crédit : direct 100 %, partiel 50 %, formation/historique 25 %, inconnu/non satisfait 0 %.")
+                        st.caption(f"Référentiel V{corpus_version} · {scoring_version}")
+                        if is_private:
+                            st.code(str(corpus_hash), language=None)
                     if is_private:
-                        if matching.get("points_attention"):
-                            st.markdown('<div class="gap-section-title" style="color:#d97706">Points d\'attention</div>', unsafe_allow_html=True)
-                            for p in matching.get("points_attention",[]):
-                                st.markdown(f'<div class="pt-att">{p}</div>',unsafe_allow_html=True)
-                        st.markdown("---"); st.code(res.get("response",""),language=None)
-                        with st.expander("🔧 Debug — job_analysis brut"):
-                            st.json(res.get("job_analysis", {}))
+                        st.markdown("---")
+                        if res.get("draft_error"):
+                            st.warning(res["draft_error"])
+                        st.code(res.get("response", ""), language=None)
+                        with st.expander("Détail de l’analyse"):
+                            st.json({"job_analysis": res.get("job_analysis", {}), "matching": matching, "metrics": res.get("metrics", {})})
             elif run: st.warning("Please paste a complete job description above." if lang=="en" else "Veuillez coller une fiche de poste complète ci-dessus.")
 
 # --- TAB 4 : RDV ---

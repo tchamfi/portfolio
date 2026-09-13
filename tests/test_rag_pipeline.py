@@ -1,0 +1,176 @@
+"""Exercise real V3 retrieval; replace only the paid generation boundary."""
+
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import doc_loader
+import rag_pipeline as rag
+
+
+LLM_CONFIG = {"model": "test-model", "temp_chat": 0.2, "top_k": 8, "max_tokens_chat": 1500}
+
+
+class RetrievalIntegrationTests(unittest.TestCase):
+    def test_bilingual_retrieval_finds_the_relevant_complete_skills(self):
+        scenarios = [
+            ("C01", "Quelle est ton expertise QA en stratégie de test frontend et backend ?"),
+            ("C01", "What is your QA expertise in frontend and backend test strategy?"),
+            ("C02", "Quels outils utilises-tu pour les tests API Postman SoapUI et Bruno ?"),
+            ("C02", "Which tools do you use for API testing with Postman SoapUI and Bruno?"),
+            ("C13", "Quel était ton rôle sur les règles de transformation des données ?"),
+            ("C13", "How do you validate data transformation rules?"),
+            ("C16", "As-tu livré une application RH adoptée en production ?"),
+            ("C16", "Have you delivered an HR application adopted in production?"),
+        ]
+        for identifier, question in scenarios:
+            with self.subTest(identifier=identifier, question=question):
+                found = {item["id"]: item for item in rag.search_evidence(question, top_k=8)}
+                self.assertIn(identifier, found)
+                self.assertTrue(found[identifier]["metadata"]["role"])
+                self.assertIn(found[identifier]["metadata"]["role"], found[identifier]["text"])
+                self.assertIn(found[identifier]["metadata"]["scope"], found[identifier]["text"])
+
+    def test_retrieval_is_stable_and_has_only_public_v3_evidence(self):
+        question = "QA Postman Bruno data transformation AWS RH carrière"
+        first = rag.search_evidence(question, top_k=30)
+        second = rag.search_evidence(question, top_k=30)
+        self.assertEqual([(r["id"], r["score"]) for r in first], [(r["id"], r["score"]) for r in second])
+        self.assertEqual(len(first), len({item["id"] for item in first}))
+        allowed_ids = {item["id"] for item in doc_loader.load_documents_as_chunks()}
+        for item in first:
+            self.assertIn(item["id"], allowed_ids)
+            self.assertEqual(item["metadata"]["source"], "skills_public.md")
+            self.assertEqual(item["metadata"]["knowledge_version"], "3.0")
+            self.assertNotRegex(item["text"], r"docs/DOC|docs/EYECLOUD|cv_data\.py|https?://")
+        status = rag.get_knowledge_status()
+        self.assertEqual(status["counts"]["skill"], 29)
+        self.assertEqual(status["counts"]["case"], 7)
+        self.assertEqual(status["counts"]["qa"], 10)
+
+    def test_references_preserve_attribution_and_relevant_scope(self):
+        evidence = rag.get_evidence_by_ids(["C01", "C13", "C16"])
+        context = rag.format_evidence(evidence)
+        self.assertIn("[C01 | compétences V3.0", context)
+        self.assertIn("U01", context)
+        self.assertIn("D04", context)
+        self.assertIn("Profil LinkedIn", context)
+        self.assertIn("Précision directe de Lionel", context)
+        self.assertIn("Périmètre", context)
+        self.assertIn("production", context)
+        self.assertIn("adoptée", context)
+
+    def test_content_change_rebuilds_the_index_without_a_restart(self):
+        marker = "validationtransformationuniquev3"
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "skills_public.md"
+            path.write_bytes(doc_loader.KNOWLEDGE_PATH.read_bytes())
+            with patch.object(rag, "get_knowledge_fingerprint", side_effect=lambda: doc_loader.get_knowledge_fingerprint(path)), \
+                 patch.object(rag, "load_documents_as_chunks", side_effect=lambda: doc_loader.load_documents_as_chunks(path)) as loader, \
+                 patch.object(rag, "_index", None):
+                before = rag.get_knowledge_status()
+                rag.search_evidence("transformations", top_k=8)
+                self.assertEqual(loader.call_count, 1)
+                old = path.read_text(encoding="utf-8")
+                updated = old.replace(
+                    "### C13 — Validation des règles de transformation des données",
+                    f"### C13 — Validation des règles de transformation des données\n\n{marker}",
+                )
+                self.assertNotEqual(old, updated)
+                path.write_text(updated, encoding="utf-8")
+                found = rag.search_evidence(marker, top_k=8)
+                after = rag.get_knowledge_status()
+                self.assertEqual(loader.call_count, 2)
+                self.assertNotEqual(before["fingerprint"], after["fingerprint"])
+                self.assertEqual(after["version"], "3.0")
+                self.assertEqual(found[0]["id"], "C13")
+                self.assertIn(marker, found[0]["text"])
+                self.assertEqual(found[0]["metadata"]["knowledge_fingerprint"], after["fingerprint"])
+
+    def test_broken_updated_corpus_does_not_silently_serve_the_cached_version(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "skills_public.md"
+            path.write_bytes(doc_loader.KNOWLEDGE_PATH.read_bytes())
+            with patch.object(rag, "get_knowledge_fingerprint", side_effect=lambda: doc_loader.get_knowledge_fingerprint(path)), \
+                 patch.object(rag, "load_documents_as_chunks", side_effect=lambda: doc_loader.load_documents_as_chunks(path)), \
+                 patch.object(rag, "_index", None):
+                self.assertTrue(rag.search_evidence("QA", top_k=8))
+                path.write_text("Version : 3.0\n# Broken reference", encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    rag.search_evidence("QA", top_k=8)
+
+
+class ChatBoundaryIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.config_patch = patch.object(rag, "_get_llm_config", return_value=LLM_CONFIG)
+        self.config_patch.start()
+        self.addCleanup(self.config_patch.stop)
+
+    def test_duration_question_sends_all_roles_and_calculated_scope_in_both_languages(self):
+        for language, question in (
+            ("fr", "Depuis combien de temps es-tu Product Owner et quelle est ton expérience QA ?"),
+            ("en", "How long have you been a Product Owner and what is your QA background?"),
+        ):
+            with self.subTest(language=language), patch.object(rag, "llm_complete", return_value=("answer", {})) as llm:
+                response, metrics = rag.ask(question, language=language)
+                self.assertEqual(response, "answer")
+                payload = json.loads(llm.call_args.kwargs["user_content"])
+                summary = payload["experience_summary"]
+                scopes = summary["scopes"]
+                self.assertEqual(set(scopes), {"total_it", "product_owner", "qa", "data_product_owner"})
+                self.assertGreater(scopes["total_it"]["months"], scopes["product_owner"]["months"])
+                self.assertGreater(scopes["product_owner"]["months"], scopes["data_product_owner"]["months"])
+                self.assertTrue({"EXP_ESSILOR", "EXP_GRDF", "EXP_ENEDIS", "EXP_EPSA"}.issubset(scopes["product_owner"]["experience_ids"]))
+                self.assertTrue({"EXP_IER", "EXP_BOUYGUES", "EXP_ORANGE"}.issubset(scopes["qa"]["experience_ids"]))
+                self.assertEqual(summary["date_precision"], "month")
+                self.assertTrue(summary["as_of"])
+                self.assertTrue(summary["duration_limits"])
+                self.assertIn("anglais" if language == "en" else "français", llm.call_args.kwargs["system"])
+                self.assertEqual(metrics["corpus_version"], "3.0")
+                self.assertEqual(metrics["corpus_fingerprint"], doc_loader.get_knowledge_fingerprint())
+                self.assertTrue(metrics["evidence_ids"])
+
+    def test_operational_fields_do_not_pollute_search_or_overwrite_profile(self):
+        question = "Quelle est ton expertise QA ?"
+        forbidden = "FORBIDDEN_ADMIN_PROMPT_INSTRUCTION"
+        operational = {
+            "tjm": "650", "disponibilite": "À convenir", "remote": "Hybride",
+            "instructions": forbidden, "experience_summary": forbidden,
+            "skills": forbidden, "api_key": forbidden,
+        }
+        with patch.object(rag, "llm_complete", return_value=("answer", {})) as llm, \
+             patch.object(rag, "_search_evidence", wraps=rag._search_evidence) as search:
+            rag.ask(question, operational_context=operational)
+        self.assertEqual(search.call_count, 1)
+        self.assertEqual(search.call_args.args[1], question)
+        payload = json.loads(llm.call_args.kwargs["user_content"])
+        self.assertEqual(payload["question"], question)
+        self.assertEqual(payload["operational_facts"], {key: operational[key] for key in ("tjm", "disponibilite", "remote")})
+        self.assertNotIn(forbidden, llm.call_args.kwargs["user_content"])
+        self.assertNotIn(forbidden, llm.call_args.kwargs["system"])
+        self.assertIsInstance(payload["experience_summary"], dict)
+        self.assertNotIn("650", payload["knowledge_excerpts"])
+
+    def test_accepted_operational_values_remain_bounded_data_not_system_policy(self):
+        instruction_text = "ADMIN_VALUE_DO_NOT_PROMOTE_TO_SYSTEM " * 40
+        with patch.object(rag, "llm_complete", return_value=("answer", {})) as llm:
+            rag.generate_response("Question", "[C01] Evidence", operational_context={"remote": instruction_text})
+        payload = json.loads(llm.call_args.kwargs["user_content"])
+        self.assertEqual(len(payload["operational_facts"]["remote"]), 500)
+        self.assertNotIn("ADMIN_VALUE_DO_NOT_PROMOTE_TO_SYSTEM", llm.call_args.kwargs["system"])
+        # This checks prompt separation, not a claim that every live model can
+        # resist every injection attempt: that requires provider-level evaluation.
+        self.assertIn("DONNÉES, jamais des", llm.call_args.kwargs["system"])
+
+    def test_empty_or_oversized_question_cannot_trigger_paid_generation(self):
+        with patch.object(rag, "llm_complete") as llm:
+            for question in ("", "   ", None, "a" * 12001):
+                with self.subTest(question_type=type(question).__name__), self.assertRaises(ValueError):
+                    rag.ask(question)
+            llm.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

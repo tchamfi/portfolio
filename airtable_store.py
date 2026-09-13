@@ -103,6 +103,14 @@ def update_all_recos(recos):
 # ================================================================
 ANALYTICS_TABLE = "tblOMs2pa8UFK9UKY"
 
+def _versioned_response(response, metrics):
+    """Keep provenance in the existing text field without changing Airtable schema."""
+    keys = ("corpus_version", "corpus_fingerprint", "experience_fingerprint", "reference_fingerprint", "experience_as_of", "as_of", "scoring_version")
+    context = {key: metrics[key] for key in keys if metrics.get(key)}
+    prefix = "[Référentiel " + json.dumps(context, ensure_ascii=False) + "]\n" if context else ""
+    return (prefix + (response or ""))[:5000]
+
+
 def log_chat(question, response, lang="fr", chunks_used=0, metrics=None):
     """Log a chat interaction to Analytics table."""
     from datetime import datetime
@@ -112,7 +120,7 @@ def log_chat(question, response, lang="fr", chunks_used=0, metrics=None):
         requests.post(url, headers=headers(), json={"records": [{"fields": {
             "type": "chat",
             "question": question[:2000],
-            "response": response[:5000],
+            "response": _versioned_response(response, m),
             "langue": lang,
             "chunks": chunks_used,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -133,7 +141,7 @@ def log_matching(question, response, score=0, job_title="", lang="fr", chunks_us
     fields = {
         "type": "matching",
         "question": question[:2000],
-        "response": response[:5000],
+        "response": _versioned_response(response, m),
         "score": score,
         "poste": job_title[:200],
         "langue": lang,

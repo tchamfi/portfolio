@@ -3,5 +3,6 @@ __pycache__/
 .env
 chroma_db/
 venv/
+.venv/
 .DS_Store
 .streamlit/secrets.toml

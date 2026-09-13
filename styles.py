@@ -172,6 +172,31 @@ CSS = """
     .pt-gap-orange{background:rgba(217,119,6,.04);border-left:3px solid #d97706;padding:.6rem 1rem;border-radius:0 10px 10px 0;margin-bottom:.5rem;font-size:.88rem;color:#334155!important;}
     .gap-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 .5rem;}
 
+    /* Matching: a readable score and explicit, color-coded assessment cards. */
+    .matching-score{display:flex;flex-direction:column;align-items:center;gap:.75rem;text-align:center;margin:.25rem 0 1.25rem;}
+    .matching-score-ring{--score-color:#15803d;width:124px;height:124px;box-sizing:border-box;border-radius:50%;padding:11px;display:grid;place-items:center;background:conic-gradient(var(--score-color) calc(var(--score, 0) * 1%),#e2e8f0 0);}
+    .matching-score-ring.high{--score-color:#15803d;}
+    .matching-score-ring.mid{--score-color:#b45309;}
+    .matching-score-ring.low{--score-color:#be123c;}
+    .matching-score-inner{width:100%;height:100%;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+    .stApp .matching-score-value{color:var(--score-color)!important;font-size:2.35rem;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;}
+    .stApp .matching-score-total{color:#475569!important;font-size:.82rem;line-height:1.4;}
+    .stApp .matching-score-label{color:#334155!important;font-size:.95rem;line-height:1.45;font-weight:600;max-width:28rem;}
+    .matching-section-heading{font-size:.8rem!important;font-weight:700!important;letter-spacing:.055em;text-transform:uppercase;margin:1.5rem 0 .7rem!important;padding:0!important;line-height:1.5!important;}
+    .stApp .matching-section-heading.positive{color:#166534!important;}
+    .stApp .matching-section-heading.negative{color:#9f1239!important;}
+    .stApp .matching-section-heading.attention{color:#92400e!important;}
+    .matching-card{border:1px solid transparent;border-left-width:4px;border-radius:0 12px 12px 0;padding:1rem 1.1rem;margin-bottom:.7rem;overflow-wrap:anywhere;}
+    .matching-card.positive{background:#edf9f0;border-color:#ccebd5;border-left-color:#16a34a;}
+    .matching-card.negative{background:#fff0f2;border-color:#f5cdd5;border-left-color:#e11d48;}
+    .matching-card.attention{background:#fff7e6;border-color:#f4dfb0;border-left-color:#d97706;}
+    .stApp .matching-card-meta{font-size:.73rem;font-weight:600;line-height:1.5;margin-bottom:.35rem;}
+    .stApp .matching-card.positive .matching-card-meta{color:#166534!important;}
+    .stApp .matching-card.negative .matching-card-meta{color:#9f1239!important;}
+    .stApp .matching-card.attention .matching-card-meta{color:#92400e!important;}
+    .stApp .matching-card-criterion{color:#475569!important;font-size:.84rem;line-height:1.5;margin-bottom:.6rem;}
+    .stApp .matching-card-body{color:#1e293b!important;font-size:.96rem;line-height:1.65;white-space:pre-line;}
+
     .info-box{background:white;border:1px solid rgba(0,0,0,.04);border-radius:16px;padding:1.2rem 1.5rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.03);}
     .info-box .info-title{color:#1e293b!important;font-weight:700;font-size:.92rem;}
     .info-box .info-desc{color:#64748b!important;font-size:.84rem;margin-top:4px;line-height:1.5;}
@@ -220,6 +245,9 @@ CSS = """
         .profil-card{padding:16px!important;}
         .profil-card p{font-size:.85rem!important;}
         .pt-fort,.pt-att,.pt-gap-red,.pt-gap-orange{font-size:.8rem!important;padding:8px 10px!important;}
+        .matching-score-ring{width:116px;height:116px;padding:10px;}
+        .matching-card{padding:.85rem .9rem;}
+        .stApp .matching-card-body{font-size:.92rem;}
     }
     @media (max-width: 480px) {
         .hero-name{font-size:1.3rem!important;}

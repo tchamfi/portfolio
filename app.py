@@ -3,11 +3,12 @@ Ask Lionel — Portfolio avec référentiel V3 (Streamlit Community Cloud)
 """
 
 import re, json, time
+from html import escape
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
 from rag_pipeline import ask, create_chroma_collection, get_knowledge_status, get_evidence_by_ids
-from agent import run_agent, SCORING_VERSION
+from agent import run_agent, SCORING_VERSION, ASSESSMENT_VERSION
 from experience import experience_summary
 from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
@@ -20,7 +21,10 @@ st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷"
 st.markdown(CSS, unsafe_allow_html=True)
 
 def _matching_explanation(requirement, language):
-    """Present computed tenure without exposing its accounting details by default."""
+    """Express verified tenure in Lionel's voice; keep the calculation internal."""
+    if requirement.get("assessment_valid") is False:
+        return ("I could not assess this point. Please try the analysis again." if language == "en"
+                else "Je n’ai pas pu évaluer ce point. Vous pouvez relancer l’analyse.")
     check = requirement.get("experience_check") or {}
     months, minimum = check.get("counted_months"), check.get("required_years")
     if not isinstance(months, int) or not isinstance(minimum, (int, float)):
@@ -30,20 +34,31 @@ def _matching_explanation(requirement, language):
         parts = ([f"{years} year{'s' if years != 1 else ''}"] if years else [])
         if remainder or not parts:
             parts.append(f"{remainder} month{'s' if remainder != 1 else ''}")
-        scope = {"total_it": "IT", "product_owner": "Product Ownership", "qa": "QA",
-                 "data_product_owner": "Data Product Ownership"}.get(check.get("scope"), "this role")
-        text = f"About {' and '.join(parts)} in {scope}, against {minimum:g} year{'s' if minimum != 1 else ''} required."
+        scope = {"total_it": "in IT", "product_owner": "as a Product Owner", "qa": "in QA",
+                 "data_product_owner": "as a Data Product Owner"}.get(check.get("scope"), "in this role")
+        text = f"I have about {' and '.join(parts)} of experience {scope}."
+        threshold = f"{minimum:g} year{'s' if minimum != 1 else ''}"
         if check.get("status") == "unknown":
-            text += " Exact dates are needed to confirm this threshold."
+            text += f" I still need to confirm the exact dates to establish whether I meet your {threshold} requirement."
+        elif check.get("status") == "not_met":
+            text += f" That is less than the {threshold} you are looking for."
+        else:
+            text += f" This meets your requirement of {threshold}."
     else:
         parts = ([f"{years} an{'s' if years != 1 else ''}"] if years else [])
         if remainder or not parts:
             parts.append(f"{remainder} mois")
-        scope = {"total_it": "IT", "product_owner": "Product Ownership", "qa": "QA",
-                 "data_product_owner": "Product Ownership data"}.get(check.get("scope"), "ce rôle")
-        text = f"Environ {' et '.join(parts)} en {scope}, pour {minimum:g} {'an demandé' if minimum == 1 else 'ans demandés'}."
+        scope = {"total_it": "dans l’IT", "product_owner": "en tant que Product Owner", "qa": "en QA",
+                 "data_product_owner": "en tant que Product Owner data"}.get(check.get("scope"), "dans ce rôle")
+        text = f"J’ai environ {' et '.join(parts)} d’expérience {scope}."
+        threshold = f"{minimum:g} an{'s' if minimum != 1 else ''}"
+        target = "l’année demandée" if minimum == 1 else f"les {threshold} que vous recherchez"
         if check.get("status") == "unknown":
-            text += " Les dates exactes restent à confirmer pour valider ce seuil."
+            text += f" Je dois encore préciser les dates exactes pour confirmer que j’atteins {target}."
+        elif check.get("status") == "not_met":
+            text += f" C’est moins que {target}."
+        else:
+            text += f" Je couvre donc {target}."
     return text
 
 def _get_page(total_items, page_size, state_key):
@@ -121,10 +136,12 @@ try:
 except Exception:
     st.error("La base de compétences est temporairement indisponible. Merci de réessayer ultérieurement.")
     st.stop()
-if st.session_state.get("knowledge_fingerprint") != knowledge_status["reference_fingerprint"]:
+if (st.session_state.get("knowledge_fingerprint") != knowledge_status["reference_fingerprint"]
+        or st.session_state.get("matching_assessment_version") != ASSESSMENT_VERSION):
     st.session_state.pop("agent_results", None)
     st.session_state.pop("agent_error", None)
     st.session_state.knowledge_fingerprint = knowledge_status["reference_fingerprint"]
+    st.session_state.matching_assessment_version = ASSESSMENT_VERSION
 if "is_private" not in st.session_state: st.session_state.is_private=False
 if "admin_view" not in st.session_state: st.session_state.admin_view=False
 if "lang" not in st.session_state: st.session_state.lang="fr"
@@ -830,7 +847,14 @@ if "matching" in tab_dict:
                         score_label = (("Match on 1 criterion" if lang == "en" else "Correspondance sur 1 critère")
                                        if requirement_count == 1 else
                                        ("Match with the supplied criteria" if lang == "en" else "Correspondance avec les critères fournis"))
-                        st.metric(score_label, f"{score}/100")
+                        score_value = max(0, min(100, int(score)))
+                        score_tone = "high" if score_value >= 75 else "mid" if score_value >= 50 else "low"
+                        st.markdown(
+                            f'<div class="matching-score"><div class="matching-score-ring {score_tone}" '
+                            f'style="--score:{score_value}" role="img" aria-label="{escape(score_label)} : {score_value}/100">'
+                            f'<div class="matching-score-inner" aria-hidden="true"><span class="matching-score-value">{score_value}</span>'
+                            '<span class="matching-score-total">/100</span></div></div>'
+                            f'<p class="matching-score-label">{escape(score_label)}</p></div>', unsafe_allow_html=True)
                     direct_count = sum(r.get("status") == "direct" for r in requirements)
                     unknown_count = sum(r.get("status") == "unknown" for r in requirements)
                     st.caption((f"{requirement_count} {'criterion' if requirement_count == 1 else 'criteria'} analysed · {direct_count} met · {unknown_count} to clarify" if lang == "en"
@@ -848,51 +872,50 @@ if "matching" in tab_dict:
                         "not_met": "Not met" if lang == "en" else "Non satisfait",
                     }
                     groups = (
-                        ("Points to consider" if lang == "en" else "Points d’attention", [r for r in requirements if r.get("status") != "direct"]),
-                        ("Criteria met" if lang == "en" else "Critères satisfaits", [r for r in requirements if r.get("status") == "direct"]),
+                        ("My strengths" if lang == "en" else "Mes points forts", "positive", [r for r in requirements if r.get("status") == "direct"]),
+                        ("Gaps against your requirements" if lang == "en" else "Écarts avec votre besoin", "negative", [r for r in requirements if r.get("status") == "not_met"]),
+                        ("Points to consider" if lang == "en" else "Points d’attention", "attention", [r for r in requirements if r.get("status") not in {"direct", "not_met"}]),
                     )
-                    for heading, rows in groups:
+                    for heading, tone, rows in groups:
                         if not rows:
                             continue
-                        st.markdown(f"**{heading}**")
+                        st.markdown(f'<h3 class="matching-section-heading {tone}">{heading}</h3>', unsafe_allow_html=True)
                         for requirement in rows:
                             label = status_labels.get(requirement.get("status"), status_labels["unknown"])
                             importance = ("Optional" if lang == "en" else "Optionnel") if requirement.get("importance") == "optional" else ("Required" if lang == "en" else "Requis")
-                            title = f"{label} · {requirement.get('text', '')}"
-                            # Keep reservations visible at every score; expand a single result too.
-                            with st.expander(title, expanded=requirement_count == 1 or requirement.get("status") in {"unknown", "not_met"}):
-                                st.caption(importance)
-                                st.write(_matching_explanation(requirement, lang))
-                                if is_private:
-                                    st.caption(requirement.get("requirement_id", requirement.get("id", "")))
-                    corpus_version = matching.get("corpus_version", res.get("corpus_version", knowledge_status["version"]))
-                    corpus_hash = matching.get("corpus_fingerprint", res.get("corpus_fingerprint", knowledge_status["fingerprint"]))
-                    scoring_version = matching.get("scoring_version", SCORING_VERSION)
-                    with st.expander("Sources and scoring method" if lang == "en" else "Sources et méthode de calcul"):
-                        st.write("Each criterion is compared with Lionel’s documented experience. Required criteria carry more weight than optional ones. Missing information remains to be clarified." if lang == "en" else "Chaque critère est comparé aux expériences documentées de Lionel. Les critères obligatoires pèsent davantage que les options. Une information manquante reste à préciser.")
-                        st.caption("Weights: required 3, optional 1. Credit: direct 100%, partial 50%, training/historical 25%, unknown/not met 0%." if lang == "en" else "Poids : requis 3, optionnel 1. Crédit : direct 100 %, partiel 50 %, formation/historique 25 %, inconnu/non satisfait 0 %.")
-                        st.caption(f"{'Skills reference' if lang == 'en' else 'Référentiel de compétences'} V{corpus_version}")
-                        for requirement in requirements:
-                            ids = requirement.get("evidence_ids", [])
-                            if not ids and not requirement.get("experience_check"):
-                                continue
-                            st.divider()
-                            st.write(requirement.get("text", ""))
-                            if ids:
-                                st.caption(("Evidence: " if lang == "en" else "Références : ") + ", ".join(ids))
-                                for evidence in requirement.get("evidence", []):
-                                    if evidence.get("text"):
-                                        st.markdown(evidence["text"])
-                            if requirement.get("experience_check"):
-                                check = requirement["experience_check"]
-                                st.write(requirement.get("justification", ""))
-                                st.caption(("Source: dated career history · " if lang == "en" else "Source : parcours daté · ") + ", ".join(check.get("references", [])))
-                                if is_private:
+                            # The offer and model output are untrusted text, never executable markup.
+                            criterion = escape(str(requirement.get("text", "")))
+                            explanation = escape(str(_matching_explanation(requirement, lang))).replace("\n", "<br>")
+                            st.markdown(
+                                f'<article class="matching-card {tone}">'
+                                f'<div class="matching-card-meta">{escape(label)} · {escape(importance)}</div>'
+                                f'<div class="matching-card-criterion">{criterion}</div>'
+                                f'<p class="matching-card-body">{explanation}</p></article>', unsafe_allow_html=True)
+                    if is_private:
+                        corpus_version = matching.get("corpus_version", res.get("corpus_version", knowledge_status["version"]))
+                        corpus_hash = matching.get("corpus_fingerprint", res.get("corpus_fingerprint", knowledge_status["fingerprint"]))
+                        scoring_version = matching.get("scoring_version", SCORING_VERSION)
+                        with st.expander("Sources and scoring method" if lang == "en" else "Sources et méthode de calcul"):
+                            st.write("Each criterion is compared with Lionel’s documented experience. Required criteria carry more weight than optional ones. Missing information remains to be clarified." if lang == "en" else "Chaque critère est comparé aux expériences documentées de Lionel. Les critères obligatoires pèsent davantage que les options. Une information manquante reste à préciser.")
+                            st.caption("Weights: required 3, optional 1. Credit: direct 100%, partial 50%, training/historical 25%, unknown/not met 0%." if lang == "en" else "Poids : requis 3, optionnel 1. Crédit : direct 100 %, partiel 50 %, formation/historique 25 %, inconnu/non satisfait 0 %.")
+                            st.caption(f"{'Skills reference' if lang == 'en' else 'Référentiel de compétences'} V{corpus_version}")
+                            for requirement in requirements:
+                                st.divider()
+                                st.write(requirement.get("text", ""))
+                                st.caption(requirement.get("requirement_id", requirement.get("id", "")))
+                                ids = requirement.get("evidence_ids", [])
+                                if ids:
+                                    st.caption(("Evidence: " if lang == "en" else "Références : ") + ", ".join(ids))
+                                    for evidence in requirement.get("evidence", []):
+                                        if evidence.get("text"):
+                                            st.markdown(evidence["text"])
+                                if requirement.get("experience_check"):
+                                    check = requirement["experience_check"]
+                                    st.write(requirement.get("justification", ""))
+                                    st.caption(("Source: dated career history · " if lang == "en" else "Source : parcours daté · ") + ", ".join(check.get("references", [])))
                                     st.json(check)
-                        if is_private:
                             st.caption(scoring_version)
                             st.code(str(corpus_hash), language=None)
-                    if is_private:
                         st.markdown("---")
                         if res.get("draft_error"):
                             st.warning(res["draft_error"])

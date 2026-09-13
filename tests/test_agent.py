@@ -106,15 +106,45 @@ class AgentTests(unittest.TestCase):
     def test_actual_requested_development_gap_remains_partial_without_review(self):
         req = requirement(text="Piloter la centralisation et développer soi-même les pipelines.")
         assessment = judgment(status="partial")
+        assessment["justification"] = "Chez EPSA, j'ai piloté la centralisation des données ; les Data Engineers construisaient les pipelines."
         assessment["uncovered_aspects"] = [{
             "requirement_quote": "développer soi-même les pipelines",
-            "reason": "Le pilotage est attribué au candidat ; la construction relevait des Data Engineers."}]
+            "reason": "Chez EPSA, je ne construisais pas moi-même les pipelines."}]
         with patch.object(agent, "llm_complete", return_value=(json.dumps({"assessments": [assessment]}), METRICS)) as llm:
             result, _ = agent.compute_matching({"requirements": [req]}, {"R001": [evidence()]})
         self.assertEqual(result["requirements"][0]["status"], "partial")
+        self.assertEqual(result["requirements"][0]["justification"], assessment["justification"])
         self.assertEqual(result["requirements"][0]["uncovered_aspects"], assessment["uncovered_aspects"])
         self.assertEqual(result["score_global"], 50)
         self.assertEqual(llm.call_count, 1)
+
+    def test_first_person_copy_preserves_quotes_evidence_and_unknown_status_in_both_languages(self):
+        reqs = [requirement(text="Rédiger des plans de test frontend et backend."),
+                requirement(2, text="Certification CKA", importance="optional")]
+        examples = {
+            "fr": ("J'ai rédigé et exécuté des plans de test frontend et backend en tant que QA.",
+                   "Je ne peux pas confirmer cette certification avec les informations disponibles."),
+            "en": ("I wrote and executed frontend and backend test plans as a QA specialist.",
+                   "I cannot confirm this certification from the available information."),
+        }
+        for language, (supported, unknown) in examples.items():
+            with self.subTest(language=language):
+                direct = {**judgment(), "justification": supported}
+                unconfirmed = {**judgment("R002", status="unknown", evidence_ids=[]),
+                               "justification": unknown}
+                with patch.object(agent, "llm_complete", return_value=(json.dumps(
+                        {"assessments": [direct, unconfirmed]}), METRICS)) as llm:
+                    result, _ = agent.compute_matching({"requirements": reqs},
+                        {"R001": [evidence()], "R002": []}, language=language)
+                self.assertEqual(llm.call_count, 1)
+                self.assertEqual([r["text"] for r in result["requirements"]],
+                                 [r["text"] for r in reqs])
+                self.assertEqual([r["justification"] for r in result["requirements"]],
+                                 [supported, unknown])
+                self.assertEqual([r["status"] for r in result["requirements"]], ["direct", "unknown"])
+                self.assertEqual(result["requirements"][0]["evidence_ids"], ["C01"])
+                self.assertEqual(result["requirements"][0]["evidence"][0]["metadata"]["sources"], ["L08", "U01"])
+                self.assertEqual(result["score_global"], 75)
 
     def test_invalid_gap_review_is_bounded_and_does_not_promote_automatically(self):
         req = requirement(text="Piloter la centralisation multi-CRM.")

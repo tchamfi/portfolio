@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
-from agent import SCORING_VERSION
+from agent import SCORING_VERSION, ASSESSMENT_VERSION
 from experience import evaluate_experience_requirement
 from rag_pipeline import get_knowledge_status
 
@@ -25,6 +25,12 @@ class AppIntegrationTests(unittest.TestCase):
         app = AppTest.from_file(APP, default_timeout=30).run()
         self.assertEqual(list(app.exception), [])
         return app
+
+    def matching_cards(self, app):
+        return [m.value for m in app.markdown if m.value.startswith('<article class="matching-card ')]
+
+    def matching_gauges(self, app):
+        return [m.value for m in app.markdown if m.value.startswith('<div class="matching-score">')]
 
     def test_admin_displays_actual_corpus_and_scoped_durations(self):
         app = self.app()
@@ -50,9 +56,12 @@ class AppIntegrationTests(unittest.TestCase):
         }
         app.run()
         self.assertEqual(list(app.exception), [])
-        self.assertTrue(any("Bruno" in item.label for item in app.expander))
+        card = self.matching_cards(app)[0]
+        self.assertIn("Bruno", card)
+        self.assertIn("À préciser", card)
+        self.assertNotIn("Non satisfait", card)
         self.assertTrue(any("Points d’attention" in m.value for m in app.markdown))
-        self.assertEqual(app.metric[0].value, "95/100")
+        self.assertIn("95/100", self.matching_gauges(app)[0])
 
     def test_empty_matching_does_not_show_a_perfect_score(self):
         app = self.app()
@@ -61,9 +70,10 @@ class AppIntegrationTests(unittest.TestCase):
         app.run()
         self.assertEqual(list(app.exception), [])
         self.assertFalse(app.metric)
+        self.assertFalse(self.matching_gauges(app))
         self.assertTrue(any("Aucune exigence" in m.value for m in app.info))
 
-    def test_single_criterion_result_scopes_score_and_keeps_calculation_in_sources(self):
+    def test_single_criterion_uses_first_person_and_keeps_sources_private(self):
         check = evaluate_experience_requirement(10, "product_owner", as_of="2026-09-13")
         for language in ("fr", "en"):
             with self.subTest(language=language):
@@ -77,15 +87,23 @@ class AppIntegrationTests(unittest.TestCase):
                         "justification": check["reason"], "experience_check": check}]}}
                 app.run()
                 self.assertEqual(list(app.exception), [])
-                self.assertEqual(app.metric[0].value, "100/100")
-                self.assertIn("1 criterion" if language == "en" else "1 critère", app.metric[0].label)
+                self.assertIn("100/100", self.matching_gauges(app)[0])
+                self.assertIn("1 criterion" if language == "en" else "1 critère", self.matching_gauges(app)[0])
                 self.assertTrue(any(("full job description" if language == "en" else "fiche de poste complète") in c.value for c in app.caption))
-                criterion, sources = app.expander[0], app.expander[1]
-                self.assertNotIn("R001", criterion.label)
-                summary = " ".join(m.value for m in criterion.markdown)
+                summary = self.matching_cards(app)[0]
+                self.assertNotIn("R001", summary)
+                self.assertIn("I have about" if language == "en" else "J’ai environ", summary)
                 self.assertIn("10 years and 5 months" if language == "en" else "10 ans et 5 mois", summary)
                 self.assertNotIn("union des mois", summary)
+                sources_label = "Sources and scoring method" if language == "en" else "Sources et méthode de calcul"
+                self.assertFalse(any(e.label == sources_label for e in app.expander))
+                self.assertFalse(any(check["reason"] in m.value for m in app.markdown))
+                app.session_state["is_private"] = True
+                app.run()
+                self.assertEqual(list(app.exception), [])
+                sources = next(e for e in app.expander if e.label == sources_label)
                 self.assertTrue(any(check["reason"] in m.value for m in sources.markdown))
+                self.assertTrue(sources.json)
 
     def test_short_tenure_explanation_preserves_uncertainty_at_a_boundary(self):
         check = evaluate_experience_requirement(125 / 12, "product_owner", as_of="2026-09-13")
@@ -98,8 +116,63 @@ class AppIntegrationTests(unittest.TestCase):
                 "justification": check["reason"], "experience_check": check}]}}
         app.run()
         self.assertEqual(list(app.exception), [])
-        self.assertIn("À préciser", app.expander[0].label)
-        self.assertTrue(any("dates exactes restent à confirmer" in m.value for m in app.expander[0].markdown))
+        summary = self.matching_cards(app)[0]
+        self.assertIn("À préciser", summary)
+        self.assertIn("Je dois encore préciser les dates exactes", summary)
+        self.assertNotIn("Je couvre donc", summary)
+
+    def test_cards_escape_offer_and_model_markup_and_keep_unknown_separate_from_gap(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.session_state["agent_results"] = {"matching": {"score_global": 0, "requirements": [
+            {"text": '<img src=x onerror="alert(1)">', "status": "not_met", "importance": "required",
+             "justification": '<script>alert("model")</script>'},
+            {"text": "Certification CKA", "status": "unknown", "importance": "optional",
+             "justification": "Je ne peux pas confirmer cette certification."}]}}
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        gap, unknown = self.matching_cards(app)
+        self.assertIn("Non satisfait", gap)
+        self.assertIn("&lt;img", gap)
+        self.assertIn("&lt;script&gt;", gap)
+        self.assertNotIn("<img", gap)
+        self.assertNotIn("<script", gap)
+        self.assertIn("À préciser", unknown)
+        self.assertIn("Optionnel", unknown)
+        self.assertNotIn("Non satisfait", unknown)
+
+    def test_data_tenure_gap_does_not_claim_total_po_tenure_in_first_person(self):
+        check = evaluate_experience_requirement(5, "data_product_owner", as_of="2026-09-13")
+        self.assertEqual(check["status"], "not_met")
+        for language in ("fr", "en"):
+            with self.subTest(language=language):
+                app = self.app()
+                if language == "en":
+                    app.radio(key="lang_radio").set_value("EN").run()
+                app.session_state["current_tab"] = "matching"
+                app.session_state["agent_results"] = {"matching": {"score_global": 0, "requirements": [
+                    {"text": "5 years as Data Product Owner", "status": "not_met",
+                     "importance": "required", "experience_check": check, "justification": check["reason"]}]}}
+                app.run()
+                self.assertEqual(list(app.exception), [])
+                summary = self.matching_cards(app)[0]
+                self.assertIn("I have about 1 year and 2 months" if language == "en"
+                              else "J’ai environ 1 an et 2 mois", summary)
+                self.assertIn("less than the 5 years" if language == "en"
+                              else "moins que les 5 ans", summary)
+                self.assertNotIn("10 years" if language == "en" else "10 ans", summary)
+
+    def test_new_assessment_version_clears_old_result_without_calling_model(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.session_state["matching_assessment_version"] = "requested-role-v2"
+        app.session_state["agent_results"] = {"matching": {"score_global": 100, "requirements": []}}
+        with patch("agent.run_agent") as run_agent:
+            app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertFalse(self.matching_gauges(app))
+        self.assertEqual(app.session_state["matching_assessment_version"], ASSESSMENT_VERSION)
+        run_agent.assert_not_called()
 
     def test_chat_passes_question_language_and_business_facts_separately(self):
         app = self.app()
@@ -121,10 +194,13 @@ class AppIntegrationTests(unittest.TestCase):
         app.session_state["agent_results"] = {"matching": {
             "score_global": None, "analysis_unavailable": True,
             "requirements": [{"requirement_id": "R001", "text": "QA", "importance": "required",
-                              "status": "unknown", "justification": "Évaluation invalide", "evidence_ids": []}]}}
+                              "status": "unknown", "assessment_valid": False,
+                              "justification": "Private validation details", "evidence_ids": []}]}}
         app.run()
         self.assertEqual(list(app.exception), [])
         self.assertFalse(app.metric)
+        self.assertFalse(self.matching_gauges(app))
+        self.assertNotIn("Private validation details", self.matching_cards(app)[0])
         self.assertTrue(any("indisponible" in m.value for m in app.warning))
 
 

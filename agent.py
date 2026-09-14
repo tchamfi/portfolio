@@ -9,12 +9,13 @@ from copy import deepcopy
 from experience import evaluate_experience_requirement
 from llm_provider import complete as llm_complete
 from rag_pipeline import get_knowledge_status, search_evidence, search_matching_evidence
+from extraction_review import review_extraction, ExtractionReviewError
 
 TOP_K = 5
 BATCH_SIZE = 8
 SCORING_VERSION = "requirements-v1"
-EXTRACTION_VERSION = "offer-prerequisites-v3"
-ASSESSMENT_VERSION = "requested-role-reviewed-v5"
+EXTRACTION_VERSION = "offer-redundancy-reviewed-v4"
+ASSESSMENT_VERSION = "source-proven-gaps-v6"
 REVIEW_VERSION = "blinded-targeted-v1"
 REVIEW_STATUSES = {"partial", "unknown", "not_met", "training", "historical"}
 STATUS_CREDIT = {"direct": 1, "partial": .5, "training": .25,
@@ -312,12 +313,23 @@ S'il n'existe aucune exigence exploitable, requirements est vide.
             return error, _merge_metrics(all_metrics)
         all_metrics.append(metrics)
         try:
-            return _validate_extraction(_json_object(text), job_text), _merge_metrics(all_metrics)
+            validated = _validate_extraction(_json_object(text), job_text)
         except (ValueError, TypeError, KeyError) as exc:
             error = {"error": "Extraction invalide : les exigences n'ont pas pu être vérifiées.",
                      "validation_detail": str(exc)}
             payload = {"job_document": job_text, "previous_extraction": text,
                        "validation_feedback": str(exc)}
+            continue
+        try:
+            kept, audit, review_metrics = review_extraction(validated["requirements"], llm["model"])
+            all_metrics.append(review_metrics)
+            final = _validate_extraction(dict(validated, requirements=kept), job_text)
+            final["extraction_review"] = {"original_requirements": validated["requirements"], "audit": audit}
+            return final, _merge_metrics(all_metrics)
+        except ExtractionReviewError as exc:
+            all_metrics.append(getattr(exc, "metrics", {}))
+            return {"error": "Les exigences n'ont pas pu être dédoublonnées de façon fiable. Relancez l'analyse.",
+                    "validation_detail": str(exc)}, _merge_metrics(all_metrics)
     return error, _merge_metrics(all_metrics)
 
 
@@ -331,7 +343,100 @@ def _unknown(requirement, reason):
             "importance": requirement["importance"], "kind": requirement["kind"],
             **_critical_requirement(requirement["text"], requirement["importance"]),
             "status": "unknown", "evidence_ids": [], "evidence": [], "uncovered_aspects": [],
+            "noncompliance_evidence": [],
             "justification": reason, "assessment_valid": False, "review_status": "pending"}
+
+
+def _negative_source_proofs(requirement, judgment, known):
+    """Accept only an exact, attributable negative statement about this aspect.
+
+    An omitted skill, a list of other certificates or 'no evidence' cannot prove
+    noncompliance. This gate is deliberately conservative: uncommon or ambiguous
+    formulations remain unknown instead of becoming a confirmed public deficit.
+    """
+    proofs = judgment.get("noncompliance_evidence")
+    aspects = judgment.get("uncovered_aspects")
+    if (not isinstance(proofs, list) or not proofs or len(proofs) > TOP_K
+            or not isinstance(aspects, list)):
+        return None
+    aspect_quotes = {_normalise_space(a.get("requirement_quote", ""))
+                     for a in aspects if isinstance(a, dict) and isinstance(a.get("requirement_quote"), str)}
+    generic = set("""a an and as at avec aux au by ce cette ces certification certifications
+        certificat certificats certificate certificates competence competences competency
+        competencies de des du d dans en et experience experiences for from in la le les
+        l langue langues language languages maitrise mastery niveau level obligatoire
+        obligatoires of or ou pour pratique pratiques professional professionnelle
+        professionnelles proficiency qualification qualifications required requis requise
+        requises skill skills sur the un une utilisation use using with knowledge
+        connaissance connaissances savoir ability capacite to work travail cette cet
+        exige exigee exigees mandatory essentiel essential confirme confirmee""".split())
+    result = []
+    for proof in proofs:
+        if not isinstance(proof, dict):
+            return None
+        source_id = proof.get("evidence_id")
+        source_quote, requirement_quote = proof.get("source_quote"), proof.get("requirement_quote")
+        if (not isinstance(source_id, str) or source_id not in judgment["evidence_ids"]
+                or source_id not in known or not isinstance(source_quote, str)
+                or not 12 <= len(source_quote.strip()) <= 600
+                or _normalise_space(source_quote) not in _normalise_space(known[source_id].get("text", ""))
+                or not isinstance(requirement_quote, str) or not requirement_quote.strip()
+                or _normalise_space(requirement_quote) not in _normalise_space(requirement["text"])
+                or _normalise_space(requirement_quote) not in aspect_quotes):
+            return None
+        source = _normalise_space(known[source_id].get("text", ""))
+        exact_quote = _normalise_space(source_quote)
+        if source.count(exact_quote) != 1:
+            return None
+        position = source.index(exact_quote)
+        start = max((source.rfind(mark, 0, position) for mark in ".!?"), default=-1) + 1
+        ends = [source.find(mark, position + len(exact_quote)) for mark in ".!?"]
+        end = min((value for value in ends if value >= 0), default=len(source))
+        context = _fold(source[start:end])
+        requested_context = _fold(_normalise_space(requirement["text"]))
+        # Recover scope from the containing sentence as well as the quote. A
+        # model cannot remove 'Chez EPSA,' from its quote and thereby turn one
+        # mission's negative contribution into a statement about the whole career.
+        scopes = re.findall(
+            r"\b(?:chez|at)\s+[^,.;!?]{1,100}?(?=\s+(?:je|i|lionel)\b|[,.;!?]|$)", context)
+        scopes += re.findall(r"\b(?:en|avant|depuis|before|since|until|in)\s+\d{4}\b", context)
+        if any(scope.strip() not in requested_context for scope in scopes):
+            return None
+        if re.search(r"\b(?:(?:dans|sur|pour)\s+(?:ce|cette)\s+(?:mission|projet|poste|role)|"
+                     r"(?:in|on|for)\s+this\s+(?:role|project|job|assignment))\b", context):
+            # A demonstrative does not identify the same project in an offer.
+            return None
+        folded = _fold(source_quote)
+        # These phrases establish a documentary limit, not a personal deficit.
+        if re.search(r"\b(?:preuv\w*|evidence|document\w*|mention\w*|confirm\w*|"
+                     r"renseign\w*|precis\w*|information\w*|attest\w*|verify|verified)\b", folded):
+            return None
+        # Keep only the negative clause: an adjacent positive sentence must not
+        # lend its unrelated tool/language to a negative quote about another one.
+        clauses = re.split(r"[.!?;,\n]|\b(?:mais|but|however|pourtant|whereas|et|and|car|because|although)\b", folded)
+        requested = set(re.findall(r"[a-z0-9]+", _fold(requirement_quote))) - generic
+        if not requested:
+            return None
+        supported = False
+        for clause in clauses:
+            personal_negative = re.search(
+                r"\b(?:je|lionel(?: tchamfong)?)\s+(?:ne\s+|n['’])"
+                r"(?:[a-z’'-]+\s+){1,5}(?:pas|jamais|aucun|aucune)\b|"
+                r"\b(?:i|lionel(?: tchamfong)?)\s+(?:(?:do|does|did|have|has|am|is|can|could)\s+not\b|"
+                r"(?:have|has)\s+no\b|(?:don't|doesn't|didn't|haven't|hasn't|can't|cannot|never)\b)", clause)
+            if not personal_negative:
+                continue
+            negative_scope = set(re.findall(r"[a-z0-9]+", clause[personal_negative.end():]))
+            if requested <= negative_scope:
+                supported = True
+                break
+        if not supported:
+            return None
+        normalized = {"evidence_id": source_id, "source_quote": source_quote.strip(),
+                      "requirement_quote": requirement_quote.strip()}
+        if normalized not in result:
+            result.append(normalized)
+    return result
 
 
 def _validate_judgment(requirement, judgment, evidence, language="fr"):
@@ -347,6 +452,16 @@ def _validate_judgment(requirement, judgment, evidence, language="fr"):
         return row
     if not isinstance(reason, str) or not reason.strip():
         return row
+    negative_proofs = []
+    if judgment["status"] == "not_met" and requirement["kind"] != "experience":
+        negative_proofs = _negative_source_proofs(requirement, judgment, known)
+        if not negative_proofs:
+            # Make the safe business judgment before any repair/review/scoring.
+            # Two identical unsupported model verdicts must not become a gap.
+            row.update(assessment_valid=True,
+                justification=("I cannot confirm this requirement from the information available."
+                               if language == "en" else "Je ne peux pas confirmer ce point avec les informations disponibles."))
+            return row
     # No retrieved evidence means unknown, not proof of no competence.
     if judgment["status"] != "unknown" and not ids:
         row["justification"] = "No evidence was cited to support this conclusion." if language == "en" else "Aucune preuve citée pour étayer cette conclusion."
@@ -374,6 +489,7 @@ def _validate_judgment(requirement, judgment, evidence, language="fr"):
                evidence=[{"id": i, "text": known[i].get("text", ""),
                           "metadata": deepcopy(known[i].get("metadata", {}))} for i in ids],
                justification=reason.strip(), uncovered_aspects=deepcopy(uncovered), assessment_valid=True,
+               noncompliance_evidence=deepcopy(negative_proofs),
                review_status="not_required" if judgment["status"] == "direct" else "pending")
     return row
 
@@ -381,7 +497,7 @@ def _validate_judgment(requirement, judgment, evidence, language="fr"):
 def _review_judgment(row):
     """Private audit data; no duplicated corpus text in the durable snapshot."""
     return {key: deepcopy(row[key]) for key in (
-        "requirement_id", "status", "evidence_ids", "uncovered_aspects", "justification")}
+        "requirement_id", "status", "evidence_ids", "uncovered_aspects", "justification", "noncompliance_evidence")}
 
 
 def _apply_review(first, second, language="fr"):
@@ -401,7 +517,7 @@ def _apply_review(first, second, language="fr"):
         row["review_status"] = "agreed"
         return row
     sources = {item["id"]: item for item in first["evidence"] + second["evidence"]}
-    row.update(status="unknown", review_status="disputed", uncovered_aspects=[],
+    row.update(status="unknown", review_status="disputed", uncovered_aspects=[], noncompliance_evidence=[],
                evidence_ids=list(sources), evidence=list(sources.values()),
                justification=("I would need to clarify my experience against this precise requirement before confirming the match."
                               if language == "en" else "Je dois préciser mon expérience au regard de cette exigence avant de confirmer la correspondance."))
@@ -426,7 +542,7 @@ def _validate_review(row, requirement, evidence, language="fr"):
         return False
     expected = _apply_review(initial, second, language)
     return all(row.get(key) == expected[key] for key in (
-        "status", "review_status", "evidence_ids", "justification", "uncovered_aspects", "assessment_valid"))
+        "status", "review_status", "evidence_ids", "justification", "uncovered_aspects", "assessment_valid", "noncompliance_evidence"))
 
 
 def _check_hard_constraints(rows, requirements, language="fr"):
@@ -454,6 +570,7 @@ def _check_hard_constraints(rows, requirements, language="fr"):
                 row["justification"] += f" Recorded duration: {years:g} years, with month-level date precision."
         row["assessment_valid"] = True
         row["review_status"] = "deterministic"
+        row["noncompliance_evidence"] = []
         row.pop("review", None)
         row.pop("validation_code", None)
         row["uncovered_aspects"] = ([{"requirement_quote": requirement["text"], "reason": row["justification"]}]
@@ -564,6 +681,19 @@ non couvert : requirement_quote est un extrait EXACT de CETTE exigence, et
 reason explique la limite des preuves sur CET extrait. N'ajoute pas une activité
 non demandée. Si tous les aspects demandés sont démontrés, le statut est direct.
 Pour direct, uncovered_aspects est vide. Un écart non documenté reste unknown.
+Pour not_met hors durée, noncompliance_evidence est OBLIGATOIRE : chaque entrée
+contient evidence_id, source_quote (phrase négative EXACTE de la preuve citée,
+attribuée personnellement à Lionel) et requirement_quote (aspect EXACT de cette
+exigence, également présent dans uncovered_aspects). Cite le nom précis de
+l'outil, de la langue, de la certification ou de l'activité concernée.
+Exemple uniquement si la source le dit réellement : « Je ne détiens pas la
+certification XYZ. » Une liste d'autres certifications ne prouve pas l'absence
+de XYZ. « Aucune preuve », « non documenté », « non mentionné », « impossible à
+confirmer » décrivent une limite documentaire : statut unknown, jamais not_met.
+N'invente jamais une déclaration négative pour justifier not_met. Si aucune
+déclaration personnelle explicite n'est citée, retourne unknown et une phrase
+neutre à la première personne. Pour les autres statuts, noncompliance_evidence=[]
+et n'affirme pas une absence de compétence à partir du silence des documents.
 AWS ne prouve pas Azure ; Postman ne prouve pas des années avec Bruno.
 Pour une liste d'outils, respecte uniquement la relation réellement exprimée :
 « et/tous » exige chaque outil ; « ou/l'un de » permet une alternative ;
@@ -603,6 +733,7 @@ La première personne change uniquement le ton, jamais le statut ni les faits.
 Ne reformule jamais les citations requirement_quote : garde l'extrait EXACT.
 JSON strict : {"assessments":[{"requirement_id":"R001","status":"direct",
 "evidence_ids":["C01"],"uncovered_aspects":[],
+"noncompliance_evidence":[],
 "justification":"Mon activité concrète en lien avec le besoin, avec limites utiles."}]}.
 Pour un écart : "uncovered_aspects":[{"requirement_quote":"extrait exact de l'exigence reçue",
 "reason":"Ma limite précise sur cette activité demandée."}].

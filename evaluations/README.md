@@ -57,3 +57,20 @@ coûts retournés par le fournisseur et empreinte du référentiel.
 Le code de sortie vaut `0` si tous les cas exécutés passent, `1` en cas d'échec,
 de blocage ou d'erreur. Le rapport distingue explicitement une vérification
 offline d'une évaluation ayant réellement terminé avec le fournisseur.
+
+## Cas observé restant à revoir
+
+La vérification de l'offre PO réelle sur l'application en ligne a produit
+**13 critères**. Le premier reprend la responsabilité du Product Backlog, la
+priorisation par valeur métier et la qualité des livrables. Une autre entrée
+reprend « Gestion de backlog : Capacité à définir, prioriser et gérer le backlog
+produit de manière efficace. ». Les deux correspondent à des statuts directs
+justifiés notamment par le backlog et le WSJF : le même aspect reçoit donc un
+poids supplémentaire. L'alerte de dédoublonnage du benchmark est légitime.
+
+Le nombre 13 ne constitue pas à lui seul une erreur : une décomposition qui
+isolerait réellement des responsabilités distinctes pourrait être recevable.
+Dans ce cas observé, il faut supprimer le recouvrement tout en préservant la
+responsabilité de qualité et les autres contraintes. L'attente du benchmark
+n'a pas été assouplie pour faire passer ce résultat. Les 25 cas n'ont pas été
+annoncés comme validés avec le fournisseur réel.

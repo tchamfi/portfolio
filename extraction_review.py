@@ -7,7 +7,7 @@ import unicodedata
 
 from llm_provider import complete as llm_complete
 
-EXTRACTION_REVIEW_VERSION = "redundancy-audit-v1"
+EXTRACTION_REVIEW_VERSION = "redundancy-scopes-v2"
 
 
 class ExtractionReviewError(ValueError):
@@ -26,6 +26,12 @@ Garde les deux si le critère à supprimer ajoute un outil, un niveau, une péri
 un périmètre, une durée, une obligation ou une autre capacité distincte.
 Une maîtrise technique n'est pas une coordination de cette technique ; partager
 un thème ou un mot n'est pas une preuve de redondance.
+Les activités et leurs périmètres explicites doivent rester couverts : utilisateurs
+ou clients, frontend/backend, sécurité, performance, accessibilité, automatisation.
+Exemple : « participer aux tests utilisateurs et valider les livrables » ne peut
+pas être absorbé par « évaluer et accepter les fonctionnalités avant production » :
+l'acceptation seule ne conserve pas la participation aux tests utilisateurs.
+De même, « tests frontend et backend » ne peut pas être absorbé par « tests frontend ».
 Ne fusionne jamais des importances, types, conditions impératives ou ambiguïtés
 d'obligation différents. Les nombres doivent rester identiques ou être tous
 présents dans le critère conservé. Pour une durée ou une langue, les données
@@ -77,6 +83,29 @@ def _named_tokens(text):
 
 def _contains_named_token(text, token):
     return re.search(r"(?<!\w)" + re.escape(token) + r"(?!\w)", _normalized(text)) is not None
+
+
+# General requirement dimensions, not a registry of tools or job-specific skills.
+# Missing explicit scope is a conservative refusal even if the model asserts
+# equivalence. Lexical presence alone still does not establish full coverage.
+_SCOPE_QUALIFIERS = (
+    ("utilisateurs", r"\b(?:utilisateurs?|usagers?|(?:end[ -]?)?users?)\b"),
+    ("clients", r"\b(?:clients?|customers?)\b"),
+    ("tests utilisateurs", r"\b(?:tests?|testing|testings?|recette)\b.{0,45}\b(?:utilisateurs?|usagers?|users?|customers?)\b|\b(?:user|customer)(?:[ -]acceptance)?[ -]tests?(?:ing)?\b"),
+    ("frontend", r"\b(?:front[ -]?end|client[ -]side|cote client)\b"),
+    ("backend", r"\b(?:back[ -]?end|server[ -]side|cote serveur)\b"),
+    ("securite", r"\b(?:securite|security|cybersecurite|cybersecurity|pentests?|penetration|intrusion)\b"),
+    ("performance", r"\b(?:performances?|latenc[ey]|latences?|throughput|debit|load|charge|scalabilite|scalability)\b"),
+    ("accessibilite", r"\b(?:accessibilite|accessibility|a11y|wcag)\b"),
+    ("automatisation", r"\b(?:automatise\w*|automatisation|automated|automation|automatic)\b"),
+    ("manuel", r"\b(?:manuell?e?s?|manual(?:ly)?)\b"),
+)
+
+
+def _scope_qualifiers(text):
+    plain = "".join(c for c in unicodedata.normalize("NFKD", _normalized(text))
+                    if not unicodedata.combining(c))
+    return {label for label, pattern in _SCOPE_QUALIFIERS if re.search(pattern, plain)}
 
 
 def _rows(requirements):
@@ -132,6 +161,11 @@ def validate_extraction_review(original_requirements, audit):
             raise ExtractionReviewError("Une absorption ferait disparaître une valeur numérique.")
         if any(not _contains_named_token(retained["text"], token) for token in _named_tokens(source["text"])):
             raise ExtractionReviewError("Une absorption ferait disparaître un outil, une certification ou un nom explicite.")
+        missing_scopes = _scope_qualifiers(source["text"]) - _scope_qualifiers(retained["text"])
+        if missing_scopes:
+            raise ExtractionReviewError(
+                f"Absorption {remove_id} vers {keep_id} refusée : périmètres explicites absents du critère conservé : "
+                + ", ".join(sorted(missing_scopes)) + ". Conservez ces critères distincts.")
         for field in ("experience", "language"):
             if source.get("kind") == field:
                 left, right = source.get(field), retained.get(field)
@@ -168,7 +202,7 @@ def _parse(raw):
 
 
 def review_extraction(requirements, model, complete_fn=None):
-    """One model call for multiple rows, none for an empty/single requirement."""
+    """One audit plus at most one invalid-output repair; none for zero/one row."""
     _rows(requirements)
     audit = {"version": EXTRACTION_REVIEW_VERSION, "absorptions": []}
     metrics = {"tokens_input": 0, "tokens_output": 0, "latence_ms": 0,
@@ -180,20 +214,31 @@ def review_extraction(requirements, model, complete_fn=None):
     fields = ("id", "text", "importance", "kind", "critical", "critical_quote",
               "critical_ambiguity", "experience", "language")
     payload = {"requirements": [{k: row[k] for k in fields if k in row} for row in requirements]}
-    try:
-        raw, usage = (complete_fn or llm_complete)(
-            model=model, system=_POLICY, user_content=json.dumps(payload, ensure_ascii=False),
-            max_tokens=4096, temperature=0)
-    except Exception as error:
-        failure = ExtractionReviewError("L'audit des redondances n'a pas abouti. Réessayez.")
-        failure.metrics = metrics
-        raise failure from error
-    metrics.update({key: usage.get(key, 0) for key in ("tokens_input", "tokens_output", "latence_ms", "cout_usd")})
-    metrics["extraction_review_calls"] = 1
-    try:
-        audit = _parse(raw)
-        rows = validate_extraction_review(requirements, audit)
-    except ExtractionReviewError as error:
-        error.metrics = metrics
-        raise
-    return rows, audit, metrics
+    for attempt in range(2):
+        policy = _POLICY
+        if attempt:
+            policy += ("\nCorrige uniquement l'audit précédent selon le retour du validateur. "
+                       "Une perte de périmètre ne se répare pas en changeant les citations : "
+                       "retire l'absorption refusée et conserve les critères distincts. "
+                       "Repars des critères originaux inchangés. Retourne l'audit complet corrigé.")
+        metrics["extraction_review_calls"] += 1
+        try:
+            raw, usage = (complete_fn or llm_complete)(
+                model=model, system=policy, user_content=json.dumps(payload, ensure_ascii=False),
+                max_tokens=4096, temperature=0)
+        except Exception as error:
+            failure = ExtractionReviewError("L'audit des redondances n'a pas abouti. Réessayez.")
+            failure.metrics = dict(metrics)
+            raise failure from error
+        for key in ("tokens_input", "tokens_output", "latence_ms", "cout_usd"):
+            metrics[key] += (usage or {}).get(key, 0)
+        try:
+            audit = _parse(raw)
+            rows = validate_extraction_review(requirements, audit)
+            return rows, audit, metrics
+        except ExtractionReviewError as error:
+            if attempt:
+                error.metrics = dict(metrics)
+                raise
+            payload = {"requirements": payload["requirements"], "previous_audit": raw,
+                       "validation_feedback": str(error)}

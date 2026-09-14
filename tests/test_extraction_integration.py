@@ -43,7 +43,7 @@ class ExtractionIntegrationTests(unittest.TestCase):
         invalid = dict(ABSORPTION, remove_id="R999")
         analysis, metrics = self.analyze([invalid])
         self.assertIn("error", analysis)
-        self.assertEqual(metrics["tokens_input"], 112)
+        self.assertEqual(metrics["tokens_input"], 124)
         with patch.object(agent, "analyze_job_posting", return_value=(analysis, metrics)), \
              patch.object(agent, "search_matching_evidence") as search:
             result = agent.run_agent(OFFER)

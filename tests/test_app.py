@@ -82,6 +82,18 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertFalse(any(tab.label == "🧠 Connaissances IA" for tab in app.tabs))
         self.assertFalse(any(button.key == "a_save" for button in app.button))
 
+    def test_extraction_review_upgrade_clears_the_old_session_result(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        app.session_state["agent_results"] = self.long_matching_result()
+        app.session_state["matching_extraction_version"] = ("previous", "previous")
+        with patch("matching_service.run_matching") as run_matching:
+            app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertNotIn("agent_results", app.session_state)
+        self.assertFalse(self.matching_gauges(app))
+        run_matching.assert_not_called()
+
     def test_prerequisite_visible_at_high_score_and_disagreement_needs_review(self):
         app = self.app()
         app.session_state["current_tab"] = "matching"

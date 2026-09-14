@@ -58,9 +58,9 @@ Le code de sortie vaut `0` si tous les cas exécutés passent, `1` en cas d'éch
 de blocage ou d'erreur. Le rapport distingue explicitement une vérification
 offline d'une évaluation ayant réellement terminé avec le fournisseur.
 
-## Cas observé restant à revoir
+## Cas observés pendant la recette
 
-La vérification de l'offre PO réelle sur l'application en ligne a produit
+La première vérification de l'offre PO réelle sur l'application en ligne a produit
 **13 critères**. Le premier reprend la responsabilité du Product Backlog, la
 priorisation par valeur métier et la qualité des livrables. Une autre entrée
 reprend « Gestion de backlog : Capacité à définir, prioriser et gérer le backlog
@@ -70,7 +70,16 @@ poids supplémentaire. L'alerte de dédoublonnage du benchmark est légitime.
 
 Le nombre 13 ne constitue pas à lui seul une erreur : une décomposition qui
 isolerait réellement des responsabilités distinctes pourrait être recevable.
-Dans ce cas observé, il faut supprimer le recouvrement tout en préservant la
-responsabilité de qualité et les autres contraintes. L'attente du benchmark
-n'a pas été assouplie pour faire passer ce résultat. Les 25 cas n'ont pas été
-annoncés comme validés avec le fournisseur réel.
+Ce constat a motivé l'audit de redondance qui conserve les textes originaux,
+les responsabilités distinctes et la trace des regroupements.
+
+Une seconde vérification a montré le risque inverse : les tests utilisateurs
+avaient été absorbés dans la seule validation des livrables, avec 11 critères.
+La participation aux tests utilisateurs est une activité supplémentaire. Le
+contrôle des périmètres explicites et les tests de régression protègent désormais
+ce cas, ainsi que les distinctions frontend/backend et les autres qualifications
+techniques prévues par le validateur. Ces contrôles ciblés ne constituent pas
+une preuve générale d'équivalence sémantique.
+
+Les attentes du benchmark n'ont pas été assouplies pour masquer ces résultats.
+Les 25 cas n'ont pas été annoncés comme validés avec le fournisseur réel.

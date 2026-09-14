@@ -169,6 +169,52 @@ class ChatBoundaryIntegrationTests(unittest.TestCase):
         self.config_patch.start()
         self.addCleanup(self.config_patch.stop)
 
+    def test_public_voice_repair_reuses_original_sources_and_counts_both_calls(self):
+        question = "Quel est votre expérience sur AWS ?"
+        context = rag.format_evidence(rag.get_evidence_by_ids(["C17", "E04"]))
+        draft = "Chez EssilorLuxottica, Lionel a piloté l'évolution d'une API vers AWS [C17, E04]."
+        answer = "Chez EssilorLuxottica, j'ai piloté l'évolution d'une API vers AWS dans mon rôle de Product Owner."
+        first = {"tokens_input": 10, "tokens_output": 20, "cout_usd": .002, "latence_ms": 100}
+        second = {"tokens_input": 30, "tokens_output": 40, "cout_usd": .004, "latence_ms": 200}
+        with patch.object(rag, "llm_complete", side_effect=[(draft, first), (answer, second)]) as llm:
+            response, metrics = rag.generate_response(question, context, operational_context={"remote": "Hybride"})
+        self.assertEqual(response, answer)
+        self.assertEqual(llm.call_count, 2)
+        original, repair = [json.loads(call.kwargs["user_content"]) for call in llm.call_args_list]
+        for field in ("question", "knowledge_excerpts", "experience_summary", "operational_facts"):
+            self.assertEqual(repair[field], original[field])
+        self.assertEqual(repair["knowledge_excerpts"], context)
+        self.assertEqual(repair["previous_draft"], draft)
+        self.assertNotIn(draft, llm.call_args.kwargs["system"])
+        self.assertEqual(metrics["response_review"]["status"], "corrected")
+        self.assertEqual(metrics["tokens_input"], 40)
+        self.assertEqual(metrics["tokens_output"], 60)
+        self.assertAlmostEqual(metrics["cout_usd"], .006)
+        self.assertEqual(metrics["latence_ms"], 300)
+
+    def test_repeated_credential_absence_returns_unknown_without_a_third_call(self):
+        question = "Détenez-vous la certification AWS Certified Solutions Architect Professional ?"
+        draft = "Je ne détiens pas la certification AWS Certified Solutions Architect Professional."
+        with patch.object(rag, "llm_complete", return_value=(draft, {})) as llm:
+            response, metrics = rag.generate_response(question, "AWS Cloud Practitioner : certification mentionnée.")
+        self.assertEqual(llm.call_count, 2)
+        self.assertNotIn("ne détiens pas", response)
+        self.assertIn("confirmer", response)
+        self.assertEqual(metrics["response_review"]["status"], "fallback")
+        self.assertIn("credential_absence", metrics["response_review"]["remaining_issues"])
+
+    def test_failed_repair_never_exposes_the_invalid_draft_or_provider_details(self):
+        draft = "I do not hold the AWS Certified Solutions Architect Professional certification."
+        with patch.object(rag, "llm_complete", side_effect=[(draft, {"tokens_input": 10}),
+                RuntimeError("PRIVATE_PROVIDER_DIAGNOSTIC")]) as llm:
+            response, metrics = rag.generate_response("Do you hold this AWS certification?", "AWS Cloud Practitioner", language="en")
+        self.assertEqual(llm.call_count, 2)
+        self.assertIn("confirm", response)
+        self.assertNotIn("do not hold", response)
+        self.assertNotIn("PRIVATE_PROVIDER_DIAGNOSTIC", response + json.dumps(metrics))
+        self.assertEqual(metrics["response_review"]["error"], "Q201")
+        self.assertEqual(metrics["tokens_input"], 10)
+
     def test_duration_question_sends_all_roles_and_calculated_scope_in_both_languages(self):
         for language, question in (
             ("fr", "Depuis combien de temps es-tu Product Owner et quelle est ton expérience QA ?"),

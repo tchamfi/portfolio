@@ -105,6 +105,53 @@ class ExtractionReviewTests(unittest.TestCase):
         with self.assertRaises(review.ExtractionReviewError):
             review.validate_extraction_review(rows, audit(absorption(rows)))
 
+    def test_observed_user_testing_requirement_is_not_absorbed_by_release_acceptance(self):
+        rows = [row("R1", "Validation des livrables : Évaluation et acceptation des fonctionnalités développées avant leur mise en production."),
+                row("R2", "Tests et validation : Compétences pour participer aux tests utilisateurs et valider les livrables avant leur lancement.")]
+        with self.assertRaisesRegex(review.ExtractionReviewError, "tests utilisateurs"):
+            review.validate_extraction_review(rows, audit(absorption(rows)))
+
+    def test_explicit_stakeholders_and_technical_test_scopes_cannot_disappear(self):
+        pairs = [("Tests frontend", "Tests frontend et backend"),
+                 ("Frontend tests", "Frontend and backend tests"),
+                 ("Accept release features", "Participate in user testing and accept release features"),
+                 ("Tests des fonctionnalités", "Tests de sécurité des fonctionnalités"),
+                 ("Tests des fonctionnalités", "Tests de performance des fonctionnalités"),
+                 ("Tests des fonctionnalités", "Tests d'accessibilité des fonctionnalités"),
+                 ("Tests des fonctionnalités", "Tests automatisés des fonctionnalités"),
+                 ("Suivi des parties prenantes", "Suivi des clients et parties prenantes")]
+        for kept, removed in pairs:
+            rows = [row("R1", kept), row("R2", removed)]
+            with self.subTest(kept=kept, removed=removed), self.assertRaises(review.ExtractionReviewError):
+                review.validate_extraction_review(rows, audit(absorption(rows)))
+
+    def test_shared_explicit_scopes_remain_eligible_for_true_redundancy(self):
+        rows = [row("R1", "Tests frontend et backend avant livraison"), row("R2", "Tests backend")]
+        self.assertEqual(review.validate_extraction_review(rows, audit(absorption(rows))), [rows[0]])
+
+    def test_one_repair_restores_user_testing_without_rewriting_criteria(self):
+        rows = [row("R1", "Validation des livrables : Évaluation et acceptation des fonctionnalités développées avant leur mise en production."),
+                row("R2", "Tests et validation : Compétences pour participer aux tests utilisateurs et valider les livrables avant leur lancement.")]
+        invalid = json.dumps({"absorptions": [absorption(rows)]})
+        provider = Mock(side_effect=[(invalid, {"tokens_input": 80}), ('{"absorptions":[]}', {"tokens_input": 30})])
+        kept, trace, metrics = review.review_extraction(rows, "test", provider)
+        self.assertEqual(kept, rows)
+        self.assertEqual(trace, audit())
+        self.assertEqual(metrics["tokens_input"], 110)
+        self.assertEqual(metrics["extraction_review_calls"], 2)
+        payload = json.loads(provider.call_args.kwargs["user_content"])
+        self.assertEqual(payload["requirements"], rows)
+        self.assertIn("tests utilisateurs", payload["validation_feedback"])
+
+    def test_repeated_scope_loss_after_repair_still_fails_closed(self):
+        rows = [row("R1", "Tests frontend"), row("R2", "Tests frontend et backend")]
+        invalid = json.dumps({"absorptions": [absorption(rows)]})
+        provider = Mock(return_value=(invalid, {"tokens_input": 40}))
+        with self.assertRaises(review.ExtractionReviewError) as raised:
+            review.review_extraction(rows, "test", provider)
+        self.assertEqual(provider.call_count, 2)
+        self.assertEqual(raised.exception.metrics["tokens_input"], 80)
+
     def test_experience_duration_and_scope_cannot_disappear(self):
         exp = {"minimum_years": 5, "scope": "product_owner", "scope_text": "comme Product Owner"}
         for change in ({"minimum_years": 10}, {"scope": "data_product_owner"}, {"scope_text": "comme Product Owner data"}):
@@ -145,8 +192,8 @@ class ExtractionReviewTests(unittest.TestCase):
             provider = Mock(return_value=(raw, {"tokens_input": 50}))
             with self.subTest(raw=raw), self.assertRaises(review.ExtractionReviewError) as raised:
                 review.review_extraction(rows, "test", provider)
-            self.assertEqual(raised.exception.metrics["tokens_input"], 50)
-            self.assertEqual(provider.call_count, 1)
+            self.assertEqual(raised.exception.metrics["tokens_input"], 100)
+            self.assertEqual(provider.call_count, 2)
 
     def test_provider_error_is_not_silently_accepted_as_empty_audit(self):
         rows = [row("R1", "Gestion du backlog produit"), row("R2", "Gestion du produit")]

@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import agent
+from extraction_review import EXTRACTION_REVIEW_VERSION
 import matching_service as service
 from matching_cache import CacheUnavailable
 
@@ -31,7 +32,7 @@ def assessment(job_text=OFFER, statuses=("direct", "direct", "unknown")):
         {"text": line, "importance": "required", "kind": "skill"}
         for line in OFFER.splitlines()]}, job_text)
     analysis["extraction_review"] = {"original_requirements": deepcopy(analysis["requirements"]),
-        "audit": {"version": "redundancy-audit-v1", "absorptions": []}}
+        "audit": {"version": EXTRACTION_REVIEW_VERSION, "absorptions": []}}
     rows, context = [], {}
     for requirement, status in zip(analysis["requirements"], statuses):
         sources = [deepcopy(EVIDENCE)] if status != "unknown" else []

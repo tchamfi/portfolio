@@ -9,7 +9,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
 from rag_pipeline import ask, create_chroma_collection, get_knowledge_status, get_evidence_by_ids
-from agent import SCORING_VERSION, ASSESSMENT_VERSION
+from agent import SCORING_VERSION, ASSESSMENT_VERSION, EXTRACTION_VERSION
+from extraction_review import EXTRACTION_REVIEW_VERSION
 from matching_service import run_matching as run_agent
 from matching_cache import CacheUnavailable
 from knowledge_store import bootstrap_initial_facts
@@ -153,11 +154,13 @@ except Exception:
     knowledge_status = {"version": "indisponible", "fingerprint": "unavailable",
                         "reference_fingerprint": "unavailable", "counts": {}, "indexed_at": None}
 if (st.session_state.get("knowledge_fingerprint") != knowledge_status["reference_fingerprint"]
-        or st.session_state.get("matching_assessment_version") != ASSESSMENT_VERSION):
+        or st.session_state.get("matching_assessment_version") != ASSESSMENT_VERSION
+        or st.session_state.get("matching_extraction_version") != (EXTRACTION_VERSION, EXTRACTION_REVIEW_VERSION)):
     st.session_state.pop("agent_results", None)
     st.session_state.pop("agent_error", None)
     st.session_state.knowledge_fingerprint = knowledge_status["reference_fingerprint"]
     st.session_state.matching_assessment_version = ASSESSMENT_VERSION
+    st.session_state.matching_extraction_version = (EXTRACTION_VERSION, EXTRACTION_REVIEW_VERSION)
 if "is_private" not in st.session_state: st.session_state.is_private=False
 if "admin_view" not in st.session_state: st.session_state.admin_view=False
 if "lang" not in st.session_state: st.session_state.lang="fr"

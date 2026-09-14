@@ -54,6 +54,15 @@ complets par critère. Les identifiants inventés ou les lots incomplets sont
 refusés. Une panne de cette étape empêche la publication d’un nouveau matching ;
 le chat peut utiliser la recherche lexicale avec un diagnostic dans ses métriques.
 
+Une offre contenant plusieurs critères passe aussi par un audit de redondance,
+sans accès au profil ni à la note. Il peut retirer une répétition uniquement au
+profit d’un critère original couvrant intégralement le même besoin. Les textes
+conservés ne sont pas réécrits. Les identifiants, citations, poids, prérequis,
+nombres et précisions de durée/langue sont contrôlés, ainsi que les noms explicites
+d’outils et certifications. L’audit et les critères initiaux restent dans la trace
+privée et sont revalidés lors de la lecture du cache. La couverture de sens reste
+un jugement IA à contrôler par la recette ; aucun nombre de critères cible n’est imposé.
+
 La langue et les données administratives sont des paramètres séparés : elles
 ne sont pas concaténées à la question utilisée pour rechercher les compétences.
 Les identifiants des sources permettent de revenir au passage qui soutient
@@ -101,6 +110,12 @@ d’obligation dans l’offre. Une négation ou une formulation contradictoire n
 devient pas un blocage automatique. Les prérequis non satisfaits ou à confirmer
 apparaissent à proximité de la note, même élevée. Aucun plafond arbitraire
 n’est ajouté : le barème ci-dessous reste inchangé.
+
+Un statut « non satisfait » hors calcul d’ancienneté exige une déclaration
+négative explicite dans une source citée, avec une citation exacte et le
+périmètre correspondant. Une liste d’autres certifications ou l’absence de
+preuve ne suffisent pas. Sans ce fondement, le code conserve une information
+à préciser, même si deux lectures ont proposé le même écart.
 
 Le barème `requirements-v1` attribue un poids de 3 aux exigences requises et
 de 1 aux options. Les crédits sont : direct 1, partiel 0,5, formation ou

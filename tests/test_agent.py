@@ -33,6 +33,12 @@ class AgentTests(unittest.TestCase):
         self.config_patch = patch.object(agent, "_get_llm_config", return_value=CONFIG)
         self.config_patch.start()
         self.addCleanup(self.config_patch.stop)
+        # These cases isolate extraction/judgment rules; audit integration has
+        # separate tests with real source/absorption validation.
+        self.audit_patch = patch("extraction_review.llm_complete", return_value=(
+            '{"absorptions":[]}', {"tokens_input": 0, "tokens_output": 0}))
+        self.audit_patch.start()
+        self.addCleanup(self.audit_patch.stop)
 
     def test_critical_prerequisites_require_positive_exact_obligation_wording(self):
         examples = [
@@ -132,8 +138,11 @@ class AgentTests(unittest.TestCase):
         reqs = [requirement(text="Backlog"), requirement(2, text="CKA obligatoire"),
                 requirement(3, text="Espagnol impératif")]
         met = agent._validate_judgment(reqs[0], judgment(), [evidence()])
+        negative_source = {**evidence(), "text": "Je ne détiens pas la certification CKA."}
         gap = agent._validate_judgment(reqs[1], {**judgment("R002", "not_met"),
-            "uncovered_aspects": [{"requirement_quote": "CKA", "reason": "Je ne détiens pas cette certification."}]}, [evidence()])
+            "uncovered_aspects": [{"requirement_quote": "CKA", "reason": "Je ne détiens pas cette certification."}],
+            "noncompliance_evidence": [{"evidence_id": "C01", "source_quote": negative_source["text"],
+                                         "requirement_quote": "CKA"}]}, [negative_source])
         unknown = agent._validate_judgment(reqs[2], judgment("R003", "unknown", []), [])
         result = agent._summarize_matching([met, agent._apply_review(gap, gap), agent._apply_review(unknown, unknown)])
         self.assertEqual([p["state"] for p in result["prerequisites"]], ["confirmed_gap", "to_clarify"])
@@ -246,6 +255,97 @@ class AgentTests(unittest.TestCase):
     def test_absence_of_retrieval_is_unknown_not_explicit_noncompliance(self):
         row = agent._validate_judgment(requirement(), judgment(status="not_met", evidence_ids=[]), [])
         self.assertEqual(row["status"], "unknown")
+
+    def test_repeated_live_certification_absence_error_becomes_unknown_before_review(self):
+        reqs = [requirement(text="Utilisation professionnelle de Jira obligatoire."),
+                requirement(2, text="Utilisation professionnelle de Trello obligatoire."),
+                requirement(3, text="Certification CKA obligatoire.")]
+        missing = {**judgment("R003", "not_met"),
+            "justification": "Je ne dispose pas de preuve attestant de la certification CKA dans mon parcours.",
+            "uncovered_aspects": [{"requirement_quote": "Certification CKA", "reason": "Aucune preuve de CKA."}]}
+        first = {"assessments": [judgment(), judgment("R002"), missing]}
+        source = {**evidence(), "text": "Certifications : CSPO, CSM, AWS Cloud Practitioner."}
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps(first), METRICS), (json.dumps({"assessments": [missing]}), METRICS)]) as llm:
+            result, _ = agent.compute_matching({"requirements": reqs}, {r["id"]: [source] for r in reqs})
+        self.assertEqual(llm.call_count, 2)
+        self.assertEqual(result["score_global"], 67)
+        self.assertEqual([r["status"] for r in result["requirements"]], ["direct", "direct", "unknown"])
+        row = result["requirements"][2]
+        self.assertEqual(row["review_status"], "agreed")
+        self.assertEqual(row["review"]["initial"]["status"], "unknown")
+        self.assertEqual(row["review"]["second"]["status"], "unknown")
+        self.assertEqual(row["evidence_ids"], [])
+        self.assertEqual(row["uncovered_aspects"], [])
+        self.assertEqual(result["prerequisites"][0]["state"], "to_clarify")
+        self.assertEqual(row["justification"], "Je ne peux pas confirmer ce point avec les informations disponibles.")
+
+    def test_negative_proof_must_be_exact_cited_personal_and_specific(self):
+        req = requirement(text="Certification CKA obligatoire")
+        cases = [
+            ("Je ne détiens pas la certification AWS.", "Je ne détiens pas la certification CKA.", "CKA"),
+            ("Je ne détiens pas la certification AWS.", "Je ne détiens pas la certification AWS.", "CKA"),
+            ("Je ne dispose pas de preuve attestant de la certification CKA.",
+             "Je ne dispose pas de preuve attestant de la certification CKA.", "CKA"),
+            ("Aucune certification CKA n’est mentionnée.", "Aucune certification CKA n’est mentionnée.", "CKA"),
+            ("Je ne peux pas confirmer la certification CKA.", "Je ne peux pas confirmer la certification CKA.", "CKA"),
+            ("Je ne détiens pas AWS. Je détiens CKA.", "Je ne détiens pas AWS. Je détiens CKA.", "CKA"),
+            ("Je ne détiens pas AWS mais je détiens CKA.", "Je ne détiens pas AWS mais je détiens CKA.", "CKA"),
+            ("Je ne détiens pas AWS et je détiens CKA.", "Je ne détiens pas AWS et je détiens CKA.", "CKA"),
+            ("Je ne détiens pas la certification AWS.", "Je ne détiens pas la certification AWS.", "Certification"),
+        ]
+        for source_text, quote, aspect in cases:
+            with self.subTest(source=source_text, quote=quote):
+                proposed = {**judgment(status="not_met"),
+                    "uncovered_aspects": [{"requirement_quote": aspect, "reason": "Non couvert."}],
+                    "noncompliance_evidence": [{"evidence_id": "C01", "source_quote": quote, "requirement_quote": aspect}]}
+                row = agent._validate_judgment(req, proposed, [{**evidence(), "text": source_text}])
+                self.assertEqual(row["status"], "unknown")
+                self.assertTrue(row["assessment_valid"])
+                self.assertEqual(row["noncompliance_evidence"], [])
+                self.assertEqual(row["uncovered_aspects"], [])
+
+    def test_explicit_personal_noncompliance_remains_confirmed_in_french_and_english(self):
+        cases = [("fr", "Certification CKA obligatoire", "CKA", "Je ne détiens pas la certification CKA."),
+                 ("en", "CKA certification required", "CKA", "I do not hold the CKA certificate."),
+                 ("fr", "Pratique de Bruno", "Bruno", "Je n’ai jamais utilisé Bruno."),
+                 ("en", "Spanish language", "Spanish", "I do not speak Spanish.")]
+        for lang, text, aspect, source_text in cases:
+            with self.subTest(language=lang, text=text):
+                req = requirement(text=text)
+                proposed = {**judgment(status="not_met"), "justification": source_text,
+                    "uncovered_aspects": [{"requirement_quote": aspect, "reason": source_text}],
+                    "noncompliance_evidence": [{"evidence_id": "C01", "source_quote": source_text, "requirement_quote": aspect}]}
+                source = {**evidence(), "text": source_text}
+                with patch.object(agent, "llm_complete", return_value=(json.dumps({"assessments": [proposed]}), METRICS)):
+                    result, _ = agent.compute_matching({"requirements": [req]}, {"R001": [source]}, language=lang)
+                row = result["requirements"][0]
+                self.assertEqual(row["status"], "not_met")
+                self.assertEqual(row["noncompliance_evidence"], proposed["noncompliance_evidence"])
+                self.assertTrue(agent._validate_review(row, req, [source], lang))
+
+    def test_a_mission_scoped_negative_cannot_become_a_global_career_deficit(self):
+        for text, source_text, quote, expected in [
+            ("Développer des pipelines", "Chez EPSA, je n’ai pas développé de pipelines.",
+             "Chez EPSA, je n’ai pas développé de pipelines.", "unknown"),
+            ("Développer des pipelines", "Chez EPSA, je n’ai pas développé de pipelines.",
+             "je n’ai pas développé de pipelines.", "unknown"),
+            ("Développer des pipelines chez EPSA", "Chez EPSA, je n’ai pas développé de pipelines.",
+             "je n’ai pas développé de pipelines.", "not_met"),
+            ("Develop pipelines", "At ExampleCorp, I did not develop pipelines.",
+             "I did not develop pipelines.", "unknown"),
+            ("Develop pipelines at ExampleCorp", "At ExampleCorp, I did not develop pipelines.",
+             "I did not develop pipelines.", "not_met"),
+            ("Développer des pipelines", "Dans cette mission, je n’ai pas développé de pipelines.",
+             "je n’ai pas développé de pipelines.", "unknown"),
+        ]:
+            with self.subTest(requirement=text, source=source_text, quote=quote):
+                req = requirement(text=text)
+                proposed = {**judgment(status="not_met"),
+                    "uncovered_aspects": [{"requirement_quote": "pipelines", "reason": source_text}],
+                    "noncompliance_evidence": [{"evidence_id": "C01", "source_quote": quote, "requirement_quote": "pipelines"}]}
+                row = agent._validate_judgment(req, proposed, [{**evidence(), "text": source_text}])
+                self.assertEqual(row["status"], expected)
 
     def test_unrequested_pipeline_coding_is_not_a_valid_gap_for_product_ownership(self):
         req = requirement(text="Piloter la centralisation des données de plusieurs CRM et vérifier les règles de transformation.")

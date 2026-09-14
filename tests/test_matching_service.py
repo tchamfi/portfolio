@@ -30,6 +30,8 @@ def assessment(job_text=OFFER, statuses=("direct", "direct", "unknown")):
     analysis = agent._validate_extraction({"titre": "Product Owner", "requirements": [
         {"text": line, "importance": "required", "kind": "skill"}
         for line in OFFER.splitlines()]}, job_text)
+    analysis["extraction_review"] = {"original_requirements": deepcopy(analysis["requirements"]),
+        "audit": {"version": "redundancy-audit-v1", "absorptions": []}}
     rows, context = [], {}
     for requirement, status in zip(analysis["requirements"], statuses):
         sources = [deepcopy(EVIDENCE)] if status != "unknown" else []
@@ -406,6 +408,42 @@ class MatchingServiceTests(unittest.TestCase):
         self.assertEqual(row, first["matching"]["requirements"][0])
         self.assertEqual(row["review"]["initial"]["status"], "unknown")
         self.assertEqual(row["review"]["second"]["status"], "direct")
+        self.generate.assert_called_once()
+
+    def test_cached_confirmed_gap_requires_the_same_exact_negative_source_after_restart(self):
+        generated = assessment()
+        requirement = generated["job_analysis"]["requirements"][2]
+        negative = {"id": "C02", "text": "Je n’ai jamais utilisé Trello.", "metadata": {"sources": ["U01"]}}
+        proposed = {"requirement_id": requirement["id"], "status": "not_met", "evidence_ids": ["C02"],
+            "justification": negative["text"],
+            "uncovered_aspects": [{"requirement_quote": "Trello", "reason": negative["text"]}],
+            "noncompliance_evidence": [{"evidence_id": "C02", "source_quote": negative["text"], "requirement_quote": "Trello"}]}
+        row = agent._validate_judgment(requirement, proposed, [negative])
+        generated["matching"]["requirements"][2] = agent._apply_review(row, row)
+        generated["matching"] = agent._summarize_matching(generated["matching"]["requirements"])
+        generated["profile_context"][requirement["id"]] = [negative]
+        self.generate.side_effect = None
+        self.generate.return_value = generated
+        self.evidence.side_effect = lambda ids: [deepcopy({"C01": EVIDENCE, "C02": negative}[key]) for key in ids]
+        first = service.run_matching(OFFER)
+        self.clear_memory()
+        second = service.run_matching(OFFER)
+        self.assertEqual(second["matching"]["requirements"][2], first["matching"]["requirements"][2])
+        self.assertEqual(second["matching"]["requirements"][2]["status"], "not_met")
+        key, original = next(iter(self.store.items()))
+        for corruption in ("missing negative proof", "invented negative quote", "changed source scope"):
+            with self.subTest(corruption=corruption):
+                self.clear_memory()
+                self.store[key] = deepcopy(original)
+                target = self.store[key]["result"]["matching"]["requirements"][2]
+                if corruption == "missing negative proof":
+                    target["noncompliance_evidence"] = []
+                elif corruption == "invented negative quote":
+                    target["noncompliance_evidence"][0]["source_quote"] = "Je ne maîtrise pas Trello."
+                else:
+                    target["noncompliance_evidence"][0]["requirement_quote"] = "Outils Agile"
+                with self.assertRaises(CacheUnavailable):
+                    service.run_matching(OFFER)
         self.generate.assert_called_once()
 
     def test_reuse_has_zero_model_cost_and_tokens_with_evaluation_provenance(self):

@@ -15,6 +15,7 @@ import unicodedata
 import agent
 from matching_cache import CacheUnavailable, get_cached_matching, save_cached_matching
 from rag_pipeline import get_evidence_by_ids, get_knowledge_status
+from extraction_review import validate_extraction_review
 
 SERVICE_VERSION = "reviewed-matching-v2"
 _MEMORY = OrderedDict()
@@ -31,7 +32,8 @@ def _digest(value):
 def _implementation_fingerprint():
     root = Path(__file__).resolve().parent
     names = ("agent.py", "rag_pipeline.py", "doc_loader.py", "experience.py", "llm_provider.py",
-             "matching_service.py", "matching_cache.py", "knowledge_store.py", "hybrid_retrieval.py")
+             "matching_service.py", "matching_cache.py", "knowledge_store.py", "hybrid_retrieval.py",
+             "extraction_review.py")
     return _digest({name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names})
 
 
@@ -77,17 +79,22 @@ def _validate_result(result, job_text):
             or any(r.get("assessment_valid") is not True for r in rows)):
         raise CacheUnavailable("The matching is not fully validated")
     try:
-        comparison = deepcopy(analysis)
-        for item in comparison.get("requirements", []):
-            item["text"] = unicodedata.normalize("NFC", item["text"])
-            for field in ("scope_text",):
-                if isinstance(item.get("experience", {}).get(field), str):
-                    item["experience"][field] = unicodedata.normalize("NFC", item["experience"][field])
-            if isinstance(item.get("language", {}).get("level"), str):
-                item["language"]["level"] = unicodedata.normalize("NFC", item["language"]["level"])
-        comparison["incomplete_excerpts"] = [unicodedata.normalize("NFC", t) for t in comparison.get("incomplete_excerpts", [])]
+        # Normalize both retained quotes and the original extraction/audit.
+        comparison = json.loads(unicodedata.normalize("NFC", json.dumps(analysis, ensure_ascii=False)))
         normalized = agent._validate_extraction(comparison, unicodedata.normalize("NFC", job_text))
         requirements = normalized["requirements"]
+        review = comparison.get("extraction_review")
+        if not isinstance(review, dict) or set(review) != {"original_requirements", "audit"}:
+            raise ValueError("Missing extraction review")
+        original = agent._validate_extraction(dict(comparison, requirements=review["original_requirements"]),
+                                              unicodedata.normalize("NFC", job_text))
+        if original["requirements"] != review["original_requirements"]:
+            raise ValueError("Invalid original extraction")
+        kept = validate_extraction_review(original["requirements"], review["audit"])
+        expected = agent._validate_extraction(dict(comparison, requirements=kept),
+                                              unicodedata.normalize("NFC", job_text))
+        if expected["requirements"] != requirements:
+            raise ValueError("Retained criteria do not match the extraction review")
         if len(rows) != len(requirements):
             raise ValueError("Incomplete assessment")
         for requirement, row in zip(requirements, rows):
@@ -102,6 +109,8 @@ def _validate_result(result, job_text):
             ids = row.get("evidence_ids")
             if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids) or len(ids) != len(set(ids)):
                 raise ValueError("Invalid evidence IDs")
+            if not isinstance(row.get("noncompliance_evidence"), list):
+                raise ValueError("Missing noncompliance provenance")
         score = matching.get("score_global")
         if isinstance(score, bool) or not isinstance(score, (int, float)) or score != agent._compute_score(rows):
             raise ValueError("Invalid score")
@@ -174,7 +183,10 @@ def _restore(snapshot, key, context, language, job_text):
                 raise CacheUnavailable("Snapshot tenure no longer matches the reference")
         else:
             current_evidence = result["profile_context"][requirement["id"]]
-            if (not agent._validate_judgment(requirement, row, current_evidence, language=language)["assessment_valid"]
+            validated = agent._validate_judgment(requirement, row, current_evidence, language=language)
+            if (not validated["assessment_valid"]
+                    or any(row.get(field) != validated[field] for field in (
+                        "status", "evidence_ids", "justification", "uncovered_aspects", "noncompliance_evidence"))
                     or not agent._validate_review(row, requirement, current_evidence, language)):
                 raise CacheUnavailable("Snapshot assessment or review no longer validates")
     return result

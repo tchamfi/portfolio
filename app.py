@@ -12,6 +12,8 @@ from rag_pipeline import ask, create_chroma_collection, get_knowledge_status, ge
 from agent import SCORING_VERSION, ASSESSMENT_VERSION
 from matching_service import run_matching as run_agent
 from matching_cache import CacheUnavailable
+from knowledge_store import bootstrap_initial_facts
+from admin_knowledge import render_knowledge_admin, render_correction_form
 from experience import experience_summary
 from airtable_store import load_config, save_config, load_recos, add_reco, update_all_recos, log_chat, log_matching, load_analytics
 from styles import CSS
@@ -142,10 +144,14 @@ st.markdown(TAB_JS, unsafe_allow_html=True)
 
 # --- Init ---
 try:
+    bootstrap_initial_facts()
     knowledge_status = get_knowledge_status()
 except Exception:
     st.error("La base de compétences est temporairement indisponible. Merci de réessayer ultérieurement.")
-    st.stop()
+    # Keep the profile and authenticated administration reachable for recovery.
+    # Chat and matching independently refuse an unavailable knowledge snapshot.
+    knowledge_status = {"version": "indisponible", "fingerprint": "unavailable",
+                        "reference_fingerprint": "unavailable", "counts": {}, "indexed_at": None}
 if (st.session_state.get("knowledge_fingerprint") != knowledge_status["reference_fingerprint"]
         or st.session_state.get("matching_assessment_version") != ASSESSMENT_VERSION):
     st.session_state.pop("agent_results", None)
@@ -174,7 +180,7 @@ chevron_svg=CHEVRON_SVG
 # ================================================================
 # ADMIN
 # ================================================================
-if st.session_state.admin_view:
+if st.session_state.admin_view and is_private:
     hc1,hc2=st.columns([3,1])
     with hc1: st.markdown('<div class="admin-header"><div class="admin-header-title">Panneau d&rsquo;administration</div><div class="admin-header-sub">Sauvegarde Airtable</div></div>',unsafe_allow_html=True)
     with hc2:
@@ -185,7 +191,7 @@ if st.session_state.admin_view:
     if "admin_v" not in st.session_state: st.session_state.admin_v=0
     av=st.session_state.admin_v  # version counter for widget keys
 
-    at1,at2,at3,at4,at5,at6,at7,at8,at9=st.tabs(["📋 Général","👁 Visibilité","📝 Profil","📊 Métriques","💼 Expériences","🎯 Case Studies","⭐ Recos","📈 Analytics","⚙️ LLM"])
+    at1,at2,at3,at4,at5,at6,at7,at8,at9,at10=st.tabs(["📋 Général","👁 Visibilité","📝 Profil","📊 Métriques","💼 Expériences","🎯 Case Studies","⭐ Recos","📈 Analytics","⚙️ LLM","🧠 Connaissances IA"])
 
     with at1:
         st.markdown("**Hero**")
@@ -246,8 +252,11 @@ if st.session_state.admin_view:
                       for scope, value in experience_data["scopes"].items()], hide_index=True, use_container_width=True)
         st.caption("Précision mensuelle : le mois en cours est inclus. Source des dates : knowledge/experience.json.")
         if st.button("Reconstruire l’index", key="rebuild_knowledge"):
-            create_chroma_collection(force=True)
-            st.rerun()
+            try:
+                create_chroma_collection(force=True)
+                st.rerun()
+            except Exception:
+                st.error("L’index ne peut pas être reconstruit. Vérifiez les fiches et corrections dans Connaissances IA.")
 
     with at4:
         mc1,mc2=st.columns(2)
@@ -564,17 +573,20 @@ if st.session_state.admin_view:
         llm1, llm2 = st.columns(2)
         with llm1:
             st.markdown("**Chat RAG**")
-            new_llm_temp_chat = st.slider("Température chat", 0.0, 2.0, float(cfg.get("llm_temp_chat", "1.0")), 0.1, key="llm_tc", help="0 = déterministe, 1 = naturel, 2 = créatif")
+            new_llm_temp_chat = st.slider("Température chat", 0.0, 2.0, float(cfg.get("llm_temp_chat", "1.0")), 0.1, key="llm_tc", help="Si le modèle accepte ce paramètre, une valeur basse réduit la variation sans garantir des réponses identiques.")
             new_llm_max_chat = st.number_input("Max tokens chat", 256, 4096, int(cfg.get("llm_max_tokens_chat", "1024")), 128, key="llm_mc", help="Longueur max de la réponse (~750 mots à 1024)")
             new_llm_top_k = st.slider("TOP_K (chunks RAG)", 4, 20, int(cfg.get("llm_top_k", "12")), 1, key="llm_tk", help="Nombre de chunks envoyés à Claude. Plus = plus de contexte, mais plus cher")
         with llm2:
             st.markdown("**Matching / Agent**")
-            new_llm_temp_match = st.slider("Température matching", 0.0, 2.0, float(cfg.get("llm_temp_matching", "0.2")), 0.1, key="llm_tm", help="0.2 = stable avec nuance. 0 = identique à chaque fois")
+            new_llm_temp_match = st.slider("Température matching", 0.0, 2.0, float(cfg.get("llm_temp_matching", "0.2")), 0.1, key="llm_tm", help="Concerne le brouillon email/pitch lorsque le modèle accepte ce paramètre. La répétabilité de l’évaluation repose sur son enregistrement et son barème fixe.")
             new_llm_max_match = st.number_input("Max tokens matching", 512, 4096, int(cfg.get("llm_max_tokens_matching", "1500")), 128, key="llm_mm", help="Longueur max de l'email/pitch généré")
             st.caption(f"Barème fixe et versionné : {SCORING_VERSION}. Chaque exigence est évaluée ; les informations manquantes restent visibles.")
         st.markdown("---")
         st.markdown("**Résumé de la configuration active**")
         st.write({"Modèle": new_llm_model, "Chat": {"température": new_llm_temp_chat, "max_tokens": new_llm_max_chat, "TOP_K": new_llm_top_k}, "Matching": {"température": new_llm_temp_match, "max_tokens": new_llm_max_match, "barème": SCORING_VERSION}})
+
+    with at10:
+        render_knowledge_admin()
 
     if st.button("Sauvegarder dans Airtable",use_container_width=True,type="primary",key="a_save"):
         nc={"tjm":new_tjm,"disponibilite":new_dispo,"remote":new_remote,"show_tjm":new_show_tjm,"show_phone":new_show_phone,"linkedin":new_linkedin,"email":new_email,"phone":new_phone,"calendly":new_calendly,"hero_name":new_hero_name,"hero_title":new_hero_title,"hero_tagline_fr":new_hero_tl_fr,"hero_tagline_en":new_hero_tl_en,"hero_badges":new_hero_badges,"profil_p1":new_p1,"profil_p2":new_p2,"profil_p3":new_p3,"profil_p4":new_p4,"profil_p1_en":new_p1en,"profil_p2_en":new_p2en,"profil_p3_en":new_p3en,"profil_p4_en":new_p4en,"metric1_label":nm1l,"metric1_value":nm1v,"metric1_desc":nm1d,"metric2_label":nm2l,"metric2_value":nm2v,"metric2_desc":nm2d,"metric3_label":nm3l,"metric3_value":nm3v,"metric3_desc":nm3d,"metric4_label":nm4l,"metric4_value":nm4v,"metric4_desc":nm4d,"exp":new_exp,"case_studies":new_cs,"show_profil":new_show_profil,"show_metrics":new_show_metrics,"show_case_studies":new_show_cs,"show_parcours":new_show_parcours,"show_recos":new_show_recos,"show_chat":new_show_chat,"show_matching":new_show_matching,"show_rdv":new_show_rdv,"llm_model":new_llm_model,"llm_temp_chat":str(new_llm_temp_chat),"llm_temp_matching":str(new_llm_temp_match),"llm_top_k":str(new_llm_top_k),"llm_max_tokens_chat":str(new_llm_max_chat),"llm_max_tokens_matching":str(new_llm_max_match),"_record_ids":cfg.get("_record_ids",{})}
@@ -880,6 +892,20 @@ if "matching" in tab_dict:
                         st.caption("This result covers a single criterion. Add the full job description for a more representative assessment." if lang == "en" else "Ce résultat porte sur un seul critère. Ajoutez la fiche de poste complète pour une évaluation plus représentative.")
                     elif requirement_count and score is not None:
                         st.caption("This score covers the supplied criteria; it is not a hiring probability." if lang == "en" else "Ce score porte sur les critères fournis ; ce n’est pas une probabilité d’embauche.")
+                    prerequisites = matching.get("prerequisites", [])
+                    if prerequisites:
+                        gaps = sum(p.get("state") == "confirmed_gap" for p in prerequisites)
+                        uncertain = len(prerequisites) - gaps
+                        st.warning((f"Key prerequisites: {gaps} not met · {uncertain} to clarify" if lang == "en"
+                                    else f"Prérequis importants : {gaps} non satisfait(s) · {uncertain} à clarifier"))
+                        with st.expander("View prerequisites" if lang == "en" else "Consulter les prérequis"):
+                            for prerequisite in prerequisites:
+                                st.markdown("**" + escape(prerequisite.get("text", "")) + "**")
+                                st.write(prerequisite.get("justification", ""))
+                    ambiguous_prerequisites = matching.get("prerequisite_ambiguities", [])
+                    if ambiguous_prerequisites:
+                        st.info("Some criteria contain conflicting mandatory and optional wording. Please clarify their priority." if lang == "en"
+                                else "Certains critères sont présentés à la fois comme obligatoires et optionnels. Leur priorité reste à préciser.")
                     status_labels = {
                         "direct": "Met" if lang == "en" else "Satisfait",
                         "partial": "Partially covered" if lang == "en" else "Partiellement couvert",
@@ -935,7 +961,11 @@ if "matching" in tab_dict:
                                                 else f"Points {start + 1}–{end} sur {len(rows)}")
                                     for requirement in rows[start:end]:
                                         label = status_labels.get(requirement.get("status"), status_labels["unknown"])
+                                        if requirement.get("review_status") == "disputed":
+                                            label = "Needs review" if lang == "en" else "À vérifier"
                                         importance = ("Optional" if lang == "en" else "Optionnel") if requirement.get("importance") == "optional" else ("Required" if lang == "en" else "Requis")
+                                        if requirement.get("critical_ambiguity"):
+                                            importance = "Priority to clarify" if lang == "en" else "Priorité à préciser"
                                         # The offer and model output are untrusted text, never executable markup.
                                         criterion = escape(str(requirement.get("text", "")))
                                         explanation = escape(str(_matching_explanation(requirement, lang))).replace("\n", "<br>")
@@ -944,6 +974,8 @@ if "matching" in tab_dict:
                                             f'<div class="matching-card-meta">{escape(label)} · {escape(importance)}</div>'
                                             f'<div class="matching-card-criterion">{criterion}</div>'
                                             f'<p class="matching-card-body">{explanation}</p></article>', unsafe_allow_html=True)
+                                        render_correction_form(requirement, language=lang,
+                                                               result_key=navigation_signature)
                     if is_private:
                         corpus_version = matching.get("corpus_version", res.get("corpus_version", knowledge_status["version"]))
                         corpus_hash = matching.get("corpus_fingerprint", res.get("corpus_fingerprint", knowledge_status["fingerprint"]))

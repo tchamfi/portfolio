@@ -12,6 +12,7 @@ cloud et data.
 | --- | --- |
 | `knowledge/skills_public.md` | V3 publique : compétences, expériences, cas et réponses de référence, synthétisés à partir de LinkedIn, des documents et des précisions de Lionel. |
 | `knowledge/experience.json` | Périodes et périmètres utilisés pour les exigences d’ancienneté. Les durées non établies restent inconnues. |
+| Connaissances IA publiées | Fiches ajoutées par Lionel depuis l’administration : compétences, outils, langues, certifications et réalisations, avec entreprises, pratique et limites. |
 | Configuration administrative | Disponibilité, TJM et modalités de travail, transmises séparément de la recherche documentaire. |
 
 `cv_data.py` et le dossier `docs/` ne sont plus des sources du RAG public.
@@ -31,8 +32,12 @@ non établie », sans effacer les compétences documentées dans le reste du par
 2. Le Markdown est découpé par fiches, cas, questions et expériences. Chaque
    extrait garde ses références et le contexte nécessaire. Les règles de
    matching et notes de version ne sont pas des compétences à rechercher.
-3. Le RAG construit un index TF-IDF en mémoire. Il ne nécessite ni ChromaDB,
-   ni serveur de base vectorielle, ni appel payant pour rechercher des extraits.
+3. Le RAG construit un index TF-IDF en mémoire, enrichi des fiches publiées.
+   Pour le chat et un nouveau matching, une sélection sémantique par le modèle
+   complète la recherche lexicale. Elle classe des identifiants existants ; la
+   fusion des rangs conserve les blocs complets et les outils explicitement nommés.
+   Cette étape utilise l’API IA existante et ajoute un coût et une latence au
+   premier calcul. Aucun service d’embeddings ni base vectorielle n’est ajouté.
 4. L’empreinte des sources sert à reconstruire l’index quand leur contenu change.
    La version du corpus et les informations d’indexation sont exposées dans
    l’administration pour vérifier la version réellement chargée.
@@ -41,7 +46,13 @@ non établie », sans effacer les compétences documentées dans le reste du par
    offres et extraits sont des données, pas des instructions exécutables.
 6. Le matching extrait les exigences, recherche pour chacune des références,
    puis attribue un statut. Le calcul du score se fait en Python avec un barème
-   versionné. Les réserves et points à confirmer restent visibles.
+   versionné. Les jugements ambigus font l’objet d’une seconde lecture ciblée.
+   Les réserves et points à confirmer restent visibles.
+
+La sélection sémantique travaille par lots de huit critères, avec cinq blocs
+complets par critère. Les identifiants inventés ou les lots incomplets sont
+refusés. Une panne de cette étape empêche la publication d’un nouveau matching ;
+le chat peut utiliser la recherche lexicale avec un diagnostic dans ses métriques.
 
 La langue et les données administratives sont des paramètres séparés : elles
 ne sont pas concaténées à la question utilisée pour rechercher les compétences.
@@ -76,6 +87,20 @@ faire l’objet d’une seule relecture ciblée, comme les autres erreurs de
 validation. S’il reste invalide, le score global est indisponible. Cet ancrage
 ne remplace pas la vérification sémantique des jugements
 sur des cas réels.
+
+Après la validation structurelle, une seconde lecture examine les statuts
+partiel, inconnu, non satisfait, formation et historique. Elle reçoit le besoin
+et ses preuves, sans le premier verdict. Les contrôles d’ancienneté restent
+déterministes. Un désaccord produit un statut inconnu, présenté « À vérifier » ;
+un échec de revue laisse la note indisponible. L’accord entre deux lectures du
+même modèle ne prouve pas la justesse : leurs erreurs peuvent être corrélées et
+les correspondances directes ne sont pas relues systématiquement.
+
+Les prérequis sont identifiés seulement sur une formulation explicite
+d’obligation dans l’offre. Une négation ou une formulation contradictoire ne
+devient pas un blocage automatique. Les prérequis non satisfaits ou à confirmer
+apparaissent à proximité de la note, même élevée. Aucun plafond arbitraire
+n’est ajouté : le barème ci-dessous reste inchangé.
 
 Le barème `requirements-v1` attribue un poids de 3 aux exigences requises et
 de 1 aux options. Les crédits sont : direct 1, partiel 0,5, formation ou
@@ -113,6 +138,9 @@ le token existant doit permettre la lecture et la création de ces lignes.
 Les preuves complètes sont rechargées depuis le même corpus à partir de leurs
 identifiants. Le cache ne reçoit pas l’email du visiteur. Ne pas modifier
 manuellement ses lignes : les incohérences détectées bloquent le résultat.
+Les candidats initialement sélectionnés et les deux jugements sont conservés
+et contrôlés à la relecture ; un résultat réutilisé ne relance ni recherche
+sémantique ni évaluation.
 
 Un verrou par clé dans le processus Streamlit empêche deux clics simultanés
 de générer deux évaluations. Un cache mémoire borné accélère les répétitions ;
@@ -172,6 +200,19 @@ pull requests et les modifications de `main`. Il ne déploie pas le site et
 n’utilise aucune clé LLM. Les tests Streamlit remplacent les accès Airtable
 et les appels de génération par des simulations aux frontières des services.
 
+Le jeu `evaluations/matching_cases.json` ajoute 25 cas métier sourcés et l’offre
+PO réelle. Son [mode d’emploi](evaluations/README.md) distingue les vérifications
+hors ligne des appels réels au fournisseur :
+
+```bash
+python evaluations/evaluate_matching.py
+python evaluations/evaluate_matching.py --live --case actual_po_agile_offer
+```
+
+Le mode `--live` est facturable et contourne le cache pour évaluer les jugements
+du modèle. Ses résultats doivent être relus sur le sens et les preuves ; un
+test hors ligne réussi ne valide pas la justesse du modèle en production.
+
 Les appels LLM simulés vérifient le contrat de l’application, pas la qualité
 réelle d’un fournisseur. Compléter par les cas suivants dans l’application
 avec le modèle et la configuration utilisés en production :
@@ -199,7 +240,54 @@ Comparer les résultats à un petit jeu d’offres conservé avant changement,
 notamment les erreurs de rôle ou d’ancienneté. Vérifier séparément le chat,
 le matching, les réserves, les références et les métadonnées de version.
 
-## Mettre à jour la base
+## Ajouter une compétence sans modifier le code
+
+1. Se connecter à l’administration, puis ouvrir **Connaissances IA**.
+2. Choisir **Ajouter une connaissance** et renseigner l’outil ou la compétence,
+   les entreprises et une contribution factuelle à la première personne.
+3. Préciser la nature de la pratique, ses limites et, si elle est connue, sa
+   période. Ne pas attribuer la durée entière d’une mission à un outil.
+4. Utiliser **Voir l’aperçu**, puis **Enregistrer le brouillon** ou
+   **Enregistrer et publier**. Seule la publication alimente l’IA.
+5. Vérifier les informations retrouvées ou tester une réponse IA dans ce même
+   onglet. Les preuves affichées avec une réponse sont celles réellement utilisées.
+
+Jira chez GRDF et BNP Paribas Personal Finance, ainsi que Trello chez Enedis,
+sont initialisés à partir des précisions de Lionel. Leur publication confirme
+une pratique professionnelle, sans inventer de niveau d’administration avancée
+ni de durée précise. Cette migration ne remplace jamais une fiche existante,
+y compris archivée. Elle utilise le token Airtable existant.
+
+Une modification enregistrée en brouillon laisse la dernière version publiée
+active. **Archiver** la retire ; **Restaurer** prépare un brouillon à republier.
+L’historique et les révisions protègent contre l’écrasement d’une modification
+concurrente. Les écritures sont relues avant confirmation.
+
+Pour corriger une information du Markdown de référence, indiquer son identifiant
+et le passage exact à remplacer. La correction est limitée à ce passage ; les
+autres contributions et limites sont conservées. L’aperçu doit être relu par
+l’auteur : la validation détecte les références introuvables et les corrections
+qui se chevauchent, sans prétendre détecter toute contradiction de sens.
+Pour modifier une fiche administrative, sélectionner directement cette fiche.
+
+En mode privé, **Signaler une correction** sous un critère de matching prépare
+un brouillon. Cette action ne modifie pas directement la note : la fiche doit
+être relue et publiée depuis l’administration.
+
+Les fiches sont des révisions immuables dans les champs `Name`/`Notes` Airtable,
+préfixées `__knowledge_v1__:`. Elles sont exclues de la configuration générale.
+Une publication effective change l’empreinte commune au chat et au matching ;
+une modification de brouillon ou de révision seule ne la change pas. Les autres
+sessions prennent en compte la publication à leur prochaine interaction,
+après un cache de lecture de dix secondes au maximum. Une panne de lecture
+configurée ne devient jamais une base vide silencieuse.
+
+Le stockage vise l’instance Streamlit actuelle. Airtable ne fournit pas de
+transaction globale entre fiches : des publications simultanées de corrections
+distinctes peuvent nécessiter une réparation. Une incohérence empêche l’usage
+du corpus, tout en laissant l’administration accessible pour corriger ou archiver.
+
+## Mettre à jour les sources de référence et les dates
 
 1. Modifier `knowledge/skills_public.md` en conservant les identifiants existants
    et une version explicite. Anonymiser tout nouvel exemple de document interne.

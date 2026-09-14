@@ -34,6 +34,111 @@ class AgentTests(unittest.TestCase):
         self.config_patch.start()
         self.addCleanup(self.config_patch.stop)
 
+    def test_critical_prerequisites_require_positive_exact_obligation_wording(self):
+        examples = [
+            ("Certification CKA obligatoire", True, "obligatoire"),
+            ("Anglais C1 impératif", True, "impératif"),
+            ("A CKA certificate is required", True, "required"),
+            ("Must have Jira experience", True, "Must have"),
+            ("Certification CKA non obligatoire", False, ""),
+            ("Certification CKA n'est pas obligatoire", False, ""),
+            ("No certification is required", False, ""),
+            ("A certificate is not strictly required", False, ""),
+            ("Jira proficiency", False, ""),
+            ("Expérience Jira appréciée", False, ""),
+        ]
+        for text, critical, quote in examples:
+            with self.subTest(text=text):
+                req = requirement(text=text, critical=not critical, critical_quote="Invented mandatory wording")
+                result = agent._validate_extraction({"titre": "PO", "requirements": [req]}, text)
+                actual = result["requirements"][0]
+                self.assertEqual(actual["critical"], critical)
+                self.assertEqual(actual["critical_quote"], quote)
+                self.assertIn(actual["critical_quote"], text)
+
+    def test_optional_conflict_is_reported_without_disqualifying_or_overweighting(self):
+        text = "Certification CKA obligatoire mais souhaitée"
+        result = agent._validate_extraction({"titre": "PO", "requirements": [requirement(text=text)]}, text)
+        req = result["requirements"][0]
+        self.assertFalse(req["critical"])
+        self.assertTrue(req["critical_ambiguity"])
+        self.assertEqual(req["importance"], "optional")
+
+    def test_blinded_review_targets_only_ambiguous_semantic_judgments(self):
+        reqs = [requirement(text="Backlog"), requirement(2, text="Jira et Trello")]
+        partial = judgment("R002", "partial")
+        partial["justification"] = "J'ai utilisé Jira ; mon utilisation de Trello reste à préciser."
+        partial["uncovered_aspects"] = [{"requirement_quote": "Trello", "reason": "Je dois préciser ma pratique."}]
+        second = {**partial, "justification": "Une rédaction différente, mais le même aspect reste à préciser."}
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps({"assessments": [judgment(), partial]}), METRICS),
+                (json.dumps({"assessments": [second]}), METRICS)]) as llm:
+            result, metrics = agent.compute_matching({"requirements": reqs}, {r["id"]: [evidence()] for r in reqs})
+        payload = json.loads(llm.call_args.kwargs["user_content"])
+        self.assertEqual([r["id"] for r in payload["requirements"]], ["R002"])
+        self.assertNotIn(partial["justification"], llm.call_args.kwargs["user_content"])
+        self.assertNotIn("previous_assessment", llm.call_args.kwargs["user_content"])
+        row = result["requirements"][1]
+        self.assertEqual(row["review_status"], "agreed")
+        self.assertEqual(row["justification"], partial["justification"])
+        self.assertTrue(agent._validate_review(row, reqs[1], [evidence()]))
+        self.assertEqual(result["score_global"], 75)
+        self.assertEqual(metrics["tokens_input"], 20)
+
+    def test_disagreement_is_unknown_with_neutral_first_person_copy_and_trace(self):
+        req = requirement(text="Certification CKA obligatoire")
+        initial = judgment(status="unknown", evidence_ids=[])
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps({"assessments": [initial]}), METRICS),
+                (json.dumps({"assessments": [judgment()]}), METRICS)]):
+            result, _ = agent.compute_matching({"requirements": [req]}, {"R001": [evidence()]})
+        row = result["requirements"][0]
+        self.assertEqual(row["status"], "unknown")
+        self.assertEqual(row["review_status"], "disputed")
+        self.assertTrue(row["assessment_valid"])
+        self.assertTrue(row["justification"].startswith("Je "))
+        self.assertNotIn("ne maîtrise pas", row["justification"])
+        self.assertEqual(row["review"]["initial"]["status"], "unknown")
+        self.assertEqual(row["review"]["second"]["status"], "direct")
+        self.assertEqual(result["disputed_count"], 1)
+        self.assertEqual(result["prerequisites"][0]["state"], "to_review")
+        self.assertTrue(agent._validate_review(row, req, [evidence()]))
+
+    def test_matching_statuses_with_different_claimed_gaps_are_still_disputed(self):
+        req = requirement(text="Jira et Trello")
+        first = {**judgment(status="partial"), "uncovered_aspects": [
+            {"requirement_quote": "Jira", "reason": "À préciser."}]}
+        second = {**judgment(status="partial"), "uncovered_aspects": [
+            {"requirement_quote": "Trello", "reason": "À préciser."}]}
+        with patch.object(agent, "llm_complete", side_effect=[
+                (json.dumps({"assessments": [first]}), METRICS),
+                (json.dumps({"assessments": [second]}), METRICS)]):
+            result, _ = agent.compute_matching({"requirements": [req]}, {"R001": [evidence()]})
+        self.assertEqual(result["requirements"][0]["review_status"], "disputed")
+        self.assertEqual(result["requirements"][0]["status"], "unknown")
+        self.assertEqual(result["requirements"][0]["uncovered_aspects"], [])
+
+    def test_review_failure_withholds_score_and_keeps_provider_diagnostics_private(self):
+        for failed in (RuntimeError("private credential diagnostics"), ("invalid JSON", METRICS)):
+            with self.subTest(failure=type(failed).__name__), patch.object(agent, "llm_complete", side_effect=[
+                    (json.dumps({"assessments": [judgment(status="unknown", evidence_ids=[])]}), METRICS), failed]):
+                result, _ = agent.compute_matching({"requirements": [requirement()]}, {"R001": []})
+            self.assertIsNone(result["score_global"])
+            self.assertTrue(result["analysis_unavailable"])
+            self.assertEqual(result["requirements"][0]["review_status"], "unavailable")
+            self.assertNotIn("private credential", str(result))
+
+    def test_prerequisite_warning_distinguishes_proven_gap_from_uncertainty_without_score_cap(self):
+        reqs = [requirement(text="Backlog"), requirement(2, text="CKA obligatoire"),
+                requirement(3, text="Espagnol impératif")]
+        met = agent._validate_judgment(reqs[0], judgment(), [evidence()])
+        gap = agent._validate_judgment(reqs[1], {**judgment("R002", "not_met"),
+            "uncovered_aspects": [{"requirement_quote": "CKA", "reason": "Je ne détiens pas cette certification."}]}, [evidence()])
+        unknown = agent._validate_judgment(reqs[2], judgment("R003", "unknown", []), [])
+        result = agent._summarize_matching([met, agent._apply_review(gap, gap), agent._apply_review(unknown, unknown)])
+        self.assertEqual([p["state"] for p in result["prerequisites"]], ["confirmed_gap", "to_clarify"])
+        self.assertEqual(result["score_global"], 33)
+
     def test_long_offer_retrieves_and_assesses_every_requirement_in_batches(self):
         requirements = [requirement(i) for i in range(1, 28)]
         seen = []
@@ -79,24 +184,29 @@ class AgentTests(unittest.TestCase):
         review = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
         self.assertEqual([r["id"] for r in review], ["R001", "R002", "R003"])
 
-    def test_generic_repair_recovers_invalid_rows_without_reassessing_valid_unknown(self):
+    def test_generic_repair_recovers_invalid_rows_then_blindly_reviews_unknown(self):
         reqs = [requirement(i) for i in range(1, 6)]
         first = {"assessments": [judgment("R001"), judgment("R001"),
                  judgment("R002", evidence_ids=["C99"]), judgment("R004"),
                  judgment("R005", status="unknown", evidence_ids=[])]}
         repaired = {"assessments": [judgment("R001"), judgment("R002"), judgment("R003")]}
+        reviewed = {"assessments": [judgment("R005", status="unknown", evidence_ids=[])]}
         with patch.object(agent, "llm_complete", side_effect=[
-                (json.dumps(first), METRICS), (json.dumps(repaired), METRICS)]) as llm:
+                (json.dumps(first), METRICS), (json.dumps(repaired), METRICS),
+                (json.dumps(reviewed), METRICS)]) as llm:
             result, metrics = agent.compute_matching({"requirements": reqs},
                 {r["id"]: [evidence()] for r in reqs})
-        review = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        review = json.loads(llm.call_args_list[1].kwargs["user_content"])["requirements"]
         self.assertEqual([r["id"] for r in review], ["R001", "R002", "R003"])
         self.assertTrue(all(r["assessment_valid"] for r in result["requirements"]))
         self.assertEqual([r["status"] for r in result["requirements"]],
                          ["direct", "direct", "direct", "direct", "unknown"])
         self.assertEqual(result["score_global"], 80)
         self.assertFalse(result["analysis_unavailable"])
-        self.assertEqual(metrics["tokens_input"], 20)
+        self.assertEqual(metrics["tokens_input"], 30)
+        second = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        self.assertEqual([r["id"] for r in second], ["R005"])
+        self.assertNotIn("previous_assessment", second[0])
 
     def test_one_failed_batch_withholds_score_instead_of_lowering_candidate_fit(self):
         reqs = [requirement(i) for i in range(1, 17)]
@@ -158,7 +268,7 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(row["status"], "direct")
         self.assertEqual(row["uncovered_aspects"], [])
 
-    def test_actual_requested_development_gap_remains_partial_without_review(self):
+    def test_actual_requested_development_gap_remains_partial_after_blinded_agreement(self):
         req = requirement(text="Piloter la centralisation et développer soi-même les pipelines.")
         assessment = judgment(status="partial")
         assessment["justification"] = "Chez EPSA, j'ai piloté la centralisation des données ; les Data Engineers construisaient les pipelines."
@@ -171,7 +281,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(result["requirements"][0]["justification"], assessment["justification"])
         self.assertEqual(result["requirements"][0]["uncovered_aspects"], assessment["uncovered_aspects"])
         self.assertEqual(result["score_global"], 50)
-        self.assertEqual(llm.call_count, 1)
+        self.assertEqual(llm.call_count, 2)
+        self.assertEqual(result["requirements"][0]["review_status"], "agreed")
 
     def test_first_person_copy_preserves_quotes_evidence_and_unknown_status_in_both_languages(self):
         reqs = [requirement(text="Rédiger des plans de test frontend et backend."),
@@ -191,7 +302,7 @@ class AgentTests(unittest.TestCase):
                         {"assessments": [direct, unconfirmed]}), METRICS)) as llm:
                     result, _ = agent.compute_matching({"requirements": reqs},
                         {"R001": [evidence()], "R002": []}, language=language)
-                self.assertEqual(llm.call_count, 1)
+                self.assertEqual(llm.call_count, 2)
                 self.assertEqual([r["text"] for r in result["requirements"]],
                                  [r["text"] for r in reqs])
                 self.assertEqual([r["justification"] for r in result["requirements"]],
@@ -231,15 +342,16 @@ class AgentTests(unittest.TestCase):
         checks = [{"status": "meets", "reason": "Expérience PO suffisante", "references": ["L01"]},
                   {"status": "not_met", "reason": "Durée PO data de 14 mois, inférieure aux 5 ans demandés", "references": ["L04"]}]
         with patch.object(agent, "llm_complete", side_effect=[(json.dumps(first), METRICS),
-                (json.dumps({"assessments": [corrected]}), METRICS)]) as llm, \
+                (json.dumps({"assessments": [corrected]}), METRICS),
+                (json.dumps({"assessments": [judgment("R006", status="unknown", evidence_ids=[])]}), METRICS)]) as llm, \
              patch.object(agent, "evaluate_experience_requirement", side_effect=checks):
             result, metrics = agent.compute_matching({"requirements": reqs}, {r["id"]: [evidence()] for r in reqs})
         self.assertEqual(result["score_global"], 75)
         self.assertEqual([r["status"] for r in result["requirements"]], ["direct", "direct", "direct", "direct", "not_met", "unknown"])
-        review = json.loads(llm.call_args.kwargs["user_content"])["requirements"]
+        review = json.loads(llm.call_args_list[1].kwargs["user_content"])["requirements"]
         self.assertEqual([r["id"] for r in review], ["R004"])
         self.assertIn("DIRECT ne signifie PAS", llm.call_args.kwargs["system"])
-        self.assertEqual(metrics["tokens_input"], 20)
+        self.assertEqual(metrics["tokens_input"], 30)
         self.assertEqual(result["assessment_version"], agent.ASSESSMENT_VERSION)
 
     def test_cited_role_and_source_metadata_survive_matching(self):
@@ -461,7 +573,7 @@ class AgentTests(unittest.TestCase):
                      (json.dumps({"assessments": [judgment()]}), METRICS),
                      ("Subject: Product Owner application", METRICS)]
         with patch.object(agent, "llm_complete", side_effect=responses) as llm, \
-             patch.object(agent, "search_evidence", return_value=[evidence()]), \
+             patch.object(agent, "search_matching_evidence", return_value=({"R001": [evidence()]}, {})), \
              patch.object(agent, "get_knowledge_status", return_value={"version": "V3", "fingerprint": "abc"}):
             result = agent.run_agent("Scrum", language="en")
         self.assertEqual(result["matching"]["corpus_version"], "V3")
@@ -475,7 +587,7 @@ class AgentTests(unittest.TestCase):
         extraction = {"titre": "PO", "requirements": [requirement(text="Scrum")]}
         responses = [(json.dumps(extraction), METRICS), (json.dumps({"assessments": [judgment()]}), METRICS)]
         with patch.object(agent, "llm_complete", side_effect=responses), \
-             patch.object(agent, "search_evidence", return_value=[evidence()]), \
+             patch.object(agent, "search_matching_evidence", return_value=({"R001": [evidence()]}, {})), \
              patch.object(agent, "get_knowledge_status", side_effect=[
                  {"fingerprint": "same-md", "reference_fingerprint": "old-experience"},
                  {"fingerprint": "same-md", "reference_fingerprint": "new-experience"}]), \
@@ -491,7 +603,7 @@ class AgentTests(unittest.TestCase):
                      (json.dumps({"assessments": [judgment()]}), METRICS),
                      ("Subject: application", METRICS)]
         with patch.object(agent, "llm_complete", side_effect=responses), \
-             patch.object(agent, "search_evidence", return_value=[evidence()]), \
+             patch.object(agent, "search_matching_evidence", return_value=({"R001": [evidence()]}, {})), \
              patch.object(agent, "get_knowledge_status", side_effect=[
                  {"reference_fingerprint": "old"}, {"reference_fingerprint": "old"},
                  {"reference_fingerprint": "new"}]):
@@ -506,7 +618,7 @@ class AgentTests(unittest.TestCase):
                      (json.dumps({"assessments": [judgment()]}), METRICS),
                      RuntimeError("provider diagnostic must remain private")]
         with patch.object(agent, "llm_complete", side_effect=responses), \
-             patch.object(agent, "search_evidence", return_value=[evidence()]), \
+             patch.object(agent, "search_matching_evidence", return_value=({"R001": [evidence()]}, {})), \
              patch.object(agent, "get_knowledge_status", return_value={"fingerprint": "stable"}):
             result = agent.run_agent("Scrum")
         self.assertEqual(result["matching"]["score_global"], 100)
@@ -519,7 +631,7 @@ class AgentTests(unittest.TestCase):
         extraction = {"titre": "PO", "requirements": [requirement(text="Scrum")]}
         responses = [(json.dumps(extraction), METRICS), ("broken-json", METRICS)]
         with patch.object(agent, "llm_complete", side_effect=responses), \
-             patch.object(agent, "search_evidence", return_value=[evidence()]), \
+             patch.object(agent, "search_matching_evidence", return_value=({"R001": [evidence()]}, {})), \
              patch.object(agent, "get_knowledge_status", return_value={"fingerprint": "stable"}), \
              patch.object(agent, "draft_response") as draft:
             result = agent.run_agent("Scrum")

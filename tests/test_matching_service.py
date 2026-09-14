@@ -38,7 +38,10 @@ def assessment(job_text=OFFER, statuses=("direct", "direct", "unknown")):
                     "evidence_ids": ["C01"] if sources else [],
                     "justification": ("Chez EPSA, j’ai piloté ces activités." if sources
                                       else "Ma pratique de Trello reste à confirmer.")}
-        rows.append(agent._validate_judgment(requirement, judgment, sources))
+        row = agent._validate_judgment(requirement, judgment, sources)
+        if status in agent.REVIEW_STATUSES:
+            row = agent._apply_review(row, row)
+        rows.append(row)
     matching = agent._summarize_matching(rows)
     matching.update(corpus_version=STATUS["version"], corpus_fingerprint=STATUS["fingerprint"],
                     reference_fingerprint=STATUS["reference_fingerprint"],
@@ -118,6 +121,7 @@ class MatchingServiceTests(unittest.TestCase):
         self.assertEqual(self.lookup.call_count, 2)
         self.generate.assert_called_once()
         self.save.assert_called_once()
+        self.retrieval.assert_not_called()
 
     def test_concurrent_identical_requests_coalesce_one_generation(self):
         generating, second_entering, release = threading.Event(), threading.Event(), threading.Event()
@@ -332,6 +336,76 @@ class MatchingServiceTests(unittest.TestCase):
         self.evidence.side_effect = None
         with self.assertRaises(CacheUnavailable):
             service.run_matching(OFFER)
+        self.generate.assert_called_once()
+
+    def test_cache_reuses_original_candidate_set_without_semantic_or_lexical_search(self):
+        self.retrieval.side_effect = AssertionError("Cache restoration must never run retrieval")
+        with patch.object(agent, "search_matching_evidence", side_effect=AssertionError("No hybrid search on cache restoration")):
+            first = service.run_matching(OFFER)
+            self.clear_memory()
+            repeated = service.run_matching(OFFER)
+        self.assertEqual(repeated["matching"]["requirements"], first["matching"]["requirements"])
+        saved = next(iter(self.store.values()))["result"]
+        self.assertEqual(saved["candidate_evidence_ids"], {"R001": ["C01"], "R002": ["C01"], "R003": []})
+        self.generate.assert_called_once()
+
+    def test_forged_or_missing_review_and_prerequisite_metadata_is_not_reused(self):
+        service.run_matching(OFFER)
+        key, original = next(iter(self.store.items()))
+        variants = {
+            "missing review": lambda m: m["requirements"][2].pop("review"),
+            "missing review status": lambda m: m["requirements"][2].pop("review_status"),
+            "new review version": lambda m: m["requirements"][2]["review"].update(version="future"),
+            "second verdict changed": lambda m: m["requirements"][2]["review"]["second"].update(status="direct"),
+            "initial source invented": lambda m: m["requirements"][2]["review"]["initial"].update(evidence_ids=["C01"]),
+            "invented blocker": lambda m: m["requirements"][0].update(critical=True, critical_quote="obligatoire"),
+            "invented blocker summary": lambda m: m.update(prerequisites=[{"text": "Invented"}]),
+        }
+        for name, corrupt in variants.items():
+            with self.subTest(corruption=name):
+                self.clear_memory()
+                snapshot = deepcopy(original)
+                corrupt(snapshot["result"]["matching"])
+                self.store[key] = snapshot
+                self.generate.reset_mock()
+                with self.assertRaises(CacheUnavailable):
+                    service.run_matching(OFFER)
+                self.generate.assert_not_called()
+
+    def test_failed_review_is_not_persisted_and_can_be_retried(self):
+        failed = assessment()
+        failed["matching"]["requirements"][2].update(review_status="unavailable", assessment_valid=False)
+        failed["matching"] = agent._summarize_matching(failed["matching"]["requirements"])
+        self.generate.side_effect = [failed, assessment()]
+        result = service.run_matching(OFFER)
+        self.assertIsNone(result["matching"]["score_global"])
+        self.save.assert_not_called()
+        self.assertFalse(service._MEMORY)
+        second = service.run_matching(OFFER)
+        self.assertIsInstance(second["matching"]["score_global"], int)
+        self.save.assert_called_once()
+
+    def test_disputed_review_reuses_validated_uncertainty_with_both_judgments(self):
+        generated = assessment()
+        requirement = generated["job_analysis"]["requirements"][0]
+        sources = generated["profile_context"][requirement["id"]]
+        initial = agent._validate_judgment(requirement, {
+            "requirement_id": requirement["id"], "status": "unknown", "evidence_ids": [],
+            "justification": "Je dois préciser mon rôle."}, sources)
+        second = generated["matching"]["requirements"][0]
+        generated["matching"]["requirements"][0] = agent._apply_review(initial, second)
+        generated["matching"] = agent._summarize_matching(generated["matching"]["requirements"])
+        self.generate.side_effect = None
+        self.generate.return_value = generated
+        first = service.run_matching(OFFER)
+        self.clear_memory()
+        repeated = service.run_matching(OFFER)
+        row = repeated["matching"]["requirements"][0]
+        self.assertEqual(row["review_status"], "disputed")
+        self.assertEqual(row["status"], "unknown")
+        self.assertEqual(row, first["matching"]["requirements"][0])
+        self.assertEqual(row["review"]["initial"]["status"], "unknown")
+        self.assertEqual(row["review"]["second"]["status"], "direct")
         self.generate.assert_called_once()
 
     def test_reuse_has_zero_model_cost_and_tokens_with_evaluation_provenance(self):

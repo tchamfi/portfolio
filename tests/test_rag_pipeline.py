@@ -293,5 +293,117 @@ class ChatBoundaryIntegrationTests(unittest.TestCase):
             llm.assert_not_called()
 
 
+class PublishedKnowledgeIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.published = []
+        self.snapshot = patch.object(rag, "published_snapshot", side_effect=lambda **_: {
+            "facts": self.published, "fingerprint": "store-hash"})
+        self.snapshot.start()
+        self.addCleanup(self.snapshot.stop)
+        self.index = patch.object(rag, "_index", None)
+        self.index.start()
+        self.addCleanup(self.index.stop)
+
+    def fact(self, **overrides):
+        return {"id": "K123456789abc", "title": "Jira", "kind": "tool",
+                "companies": ["GRDF", "BNP Paribas Personal Finance"],
+                "statement": "J'ai utilisé Jira chez GRDF et BNP Paribas Personal Finance.",
+                "practice": "professional", "period": "", "limits": "Administration avancée non précisée.",
+                "keywords": ["Jira"], "correction_of": "", "correction_quote": "",
+                "source": "Précision confirmée par Lionel", "state": "published", "revision": "first", **overrides}
+
+    def test_published_tool_updates_common_corpus_and_both_content_fingerprints(self):
+        before = rag.get_knowledge_status()
+        self.published = [self.fact()]
+        after = rag.get_knowledge_status()
+        self.assertNotEqual(before["fingerprint"], after["fingerprint"])
+        self.assertNotEqual(before["reference_fingerprint"], after["reference_fingerprint"])
+        self.assertEqual(after["published_count"], 1)
+        found = rag.search_evidence("Jira GRDF BNP", 5)
+        self.assertEqual(found[0]["id"], "K123456789abc")
+        self.assertIn("Contribution attribuée à Lionel", found[0]["text"])
+        self.assertIn("Administration avancée non précisée", found[0]["text"])
+        self.assertIn("Ne pas déduire une durée", found[0]["text"])
+        self.assertEqual(found[0]["metadata"]["knowledge_fingerprint"], after["fingerprint"])
+        self.assertIn("Précision confirmée par Lionel", rag.format_evidence(found))
+
+    def test_drafts_and_revision_only_edits_do_not_invalidate_factual_results(self):
+        baseline = rag.get_knowledge_status()
+        self.published = [self.fact(state="draft")]
+        self.assertEqual(baseline["fingerprint"], rag.get_knowledge_status()["fingerprint"])
+        self.published = [self.fact()]
+        first = rag.get_knowledge_status()
+        self.published = [self.fact(revision="second", updated_at="later")]
+        second = rag.get_knowledge_status()
+        self.assertEqual(first["fingerprint"], second["fingerprint"])
+        self.assertEqual(first["indexed_at"], second["indexed_at"])
+
+    def test_archiving_removes_facts_without_leaving_stale_retrieval(self):
+        baseline = rag.get_knowledge_status()
+        self.published = [self.fact()]
+        self.assertTrue(rag.get_evidence_by_ids(["K123456789abc"]))
+        self.published = []
+        self.assertEqual(rag.get_evidence_by_ids(["K123456789abc"]), [])
+        self.assertEqual(baseline["fingerprint"], rag.get_knowledge_status()["fingerprint"])
+
+    def test_unavailable_publications_never_silently_return_old_index(self):
+        self.published = [self.fact()]
+        self.assertTrue(rag.get_evidence_by_ids(["K123456789abc"]))
+        with patch.object(rag, "published_snapshot", side_effect=RuntimeError("storage failed")):
+            with self.assertRaises(RuntimeError):
+                rag.search_evidence("Jira", 5)
+
+    def test_exact_source_correction_preserves_other_facts_and_provenance(self):
+        before = {c["id"]: c for c in rag.get_evidence_by_ids(["C13", "C12"])}
+        quote = "Lionel s’assure que les règles de transformation attendues sont effectivement implémentées."
+        self.published = [self.fact(kind="skill", title="Validation fonctionnelle EPSA",
+            statement="Je vérifie l'implémentation des règles métier dans mon rôle de PO data chez EPSA.",
+            correction_of="C13", correction_quote=quote)]
+        after = {c["id"]: c for c in rag.get_evidence_by_ids(["C13", "C12"])}
+        self.assertNotIn(quote, after["C13"]["text"])
+        self.assertIn(self.published[0]["statement"], after["C13"]["text"])
+        self.assertIn("distincte de l’écriture du code d’ingestion", after["C13"]["text"])
+        self.assertIn("Profil LinkedIn, pages 3–4", after["C13"]["text"])
+        self.assertEqual(before["C12"]["text"], after["C12"]["text"])
+        self.assertIn("K123456789abc", after["C13"]["metadata"]["source_refs"])
+
+    def test_ambiguous_missing_or_overlapping_source_edits_are_rejected(self):
+        quote = "Lionel s’assure que les règles de transformation attendues sont effectivement implémentées."
+        for source_id, excerpt in (("INVENTED", quote), ("C13", "Not a real citation in this source"),
+                                   ("C13", "[C13] Validation des règles de transformation des données")):
+            with self.subTest(source_id=source_id, excerpt=excerpt), self.assertRaises(ValueError):
+                rag.validate_knowledge_publication(self.fact(correction_of=source_id, correction_quote=excerpt), [])
+        first = self.fact(correction_of="C13", correction_quote=quote)
+        second = self.fact(id="Kabcdef123456", correction_of="C13", correction_quote=quote)
+        with self.assertRaises(ValueError):
+            rag.validate_knowledge_publication(second, [first])
+
+    def test_chat_and_matching_use_the_same_published_tool_and_report_retrieval_mode(self):
+        self.published = [self.fact()]
+        def select(**kwargs):
+            payload = json.loads(kwargs["user_content"])
+            if "catalog" not in payload:
+                return "J'ai utilisé Jira chez GRDF et BNP PF.", {}
+            return json.dumps({"results": [{"requirement_id": req["id"], "evidence_ids": ["K123456789abc"]}
+                                           for req in payload["requirements"]]}), {"tokens_input": 10}
+        with patch.object(rag, "_get_llm_config", return_value=LLM_CONFIG), \
+             patch.object(rag, "llm_complete", side_effect=select), \
+             patch("hybrid_retrieval.llm_complete", side_effect=select):
+            _, chat_metrics = rag.ask("As-tu utilisé Jira ?")
+            evidence, matching_metrics = rag.search_matching_evidence([{"id": "R01", "text": "Jira"}], "test")
+        self.assertIn("K123456789abc", chat_metrics["evidence_ids"])
+        self.assertIn("K123456789abc", {item["id"] for item in evidence["R01"]})
+        self.assertEqual(chat_metrics["corpus_fingerprint"], matching_metrics["corpus_fingerprint"])
+        self.assertEqual(chat_metrics["retrieval"]["retrieval_mode"], "catalog-hybrid-v1")
+
+    def test_chat_fallback_is_explicit_in_private_metrics(self):
+        with patch.object(rag, "_get_llm_config", return_value=LLM_CONFIG), \
+             patch.object(rag, "llm_complete", side_effect=[RuntimeError("semantic provider unavailable"), ("answer", {})]):
+            answer, metrics = rag.ask("Quelle est ton expertise QA ?")
+        self.assertEqual(answer, "answer")
+        self.assertEqual(metrics["retrieval"]["retrieval_mode"], "lexical-fallback")
+        self.assertEqual(metrics["retrieval"]["retrieval_error"], "R101")
+
+
 if __name__ == "__main__":
     unittest.main()

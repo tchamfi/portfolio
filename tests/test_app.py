@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 from agent import SCORING_VERSION, ASSESSMENT_VERSION
+from config import WELCOME_EN
 from experience import evaluate_experience_requirement
 from rag_pipeline import get_knowledge_status
 from matching_cache import CacheUnavailable
@@ -372,6 +373,122 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertFalse(self.matching_gauges(app))
         self.assertEqual(app.session_state["matching_assessment_version"], ASSESSMENT_VERSION)
         run_agent.assert_not_called()
+
+    def test_chat_submission_records_a_pending_turn_before_it_is_processed(self):
+        """The submitted question is already a visible user turn when ask starts."""
+        app = self.app()
+        app.session_state["current_tab"] = "chat"
+        app.run()
+        question = "Quelle est votre expérience sur AWS ?"
+        observed_pending = []
+
+        def answer(*args, **kwargs):
+            pending = dict(app.session_state["chat_pending_turn"])
+            observed_pending.append(pending)
+            user_turn = next(message for message in app.session_state["messages"]
+                             if message.get("turn_id") == pending["id"])
+            self.assertEqual(user_turn, {
+                "role": "user", "content": question, "turn_id": pending["id"],
+            })
+            return "J’ai piloté deux produits AWS.", {"chunks_used": 2}
+
+        with patch("rag_pipeline.ask", side_effect=answer) as ask:
+            app.text_input(key="chat_typed").set_value(question)
+            next(button for button in app.button if button.label == "↑").click().run()
+
+        self.assertEqual(list(app.exception), [])
+        ask.assert_called_once()
+        self.assertEqual(observed_pending[0]["question"], question)
+        self.assertEqual(observed_pending[0]["language"], "fr")
+        self.assertNotIn("chat_pending_turn", app.session_state)
+        turns = [message for message in app.session_state["messages"] if message.get("turn_id")]
+        self.assertEqual([(message["role"], message["content"]) for message in turns[-2:]], [
+            ("user", question), ("assistant", "J’ai piloté deux produits AWS."),
+        ])
+        self.assertEqual(turns[-2]["turn_id"], turns[-1]["turn_id"])
+
+    def test_pending_chat_turn_calls_ask_once_appends_response_and_clears_state(self):
+        app = self.app()
+        app.session_state["current_tab"] = "chat"
+        turn_id = "chat-turn-41"
+        question = "Quelle est votre expérience en data ?"
+        app.session_state["messages"].append({
+            "role": "user", "content": question, "turn_id": turn_id,
+        })
+        app.session_state["chat_pending_turn"] = {
+            "id": turn_id, "question": question, "language": "fr",
+        }
+
+        with patch("rag_pipeline.ask", return_value=("J’ai été PO data chez EPSA.", {
+            "chunks_used": 3, "corpus_version": "3.0", "evidence_ids": ["C01"],
+        })) as ask:
+            app.run()
+            # A later rendering rerun must not submit the same turn again.
+            app.run()
+
+        self.assertEqual(list(app.exception), [])
+        ask.assert_called_once()
+        self.assertEqual(ask.call_args.args, (question,))
+        self.assertEqual(ask.call_args.kwargs["language"], "fr")
+        self.assertEqual(set(ask.call_args.kwargs["operational_context"]),
+                         {"tjm", "disponibilite", "remote"})
+        self.assertNotIn("chat_pending_turn", app.session_state)
+        answers = [message for message in app.session_state["messages"]
+                   if message.get("role") == "assistant" and message.get("turn_id") == turn_id]
+        self.assertEqual(len(answers), 1)
+        self.assertEqual(answers[0]["content"], "J’ai été PO data chez EPSA.")
+
+    def test_failed_pending_chat_turn_adds_fallback_and_clears_state(self):
+        app = self.app()
+        app.session_state["current_tab"] = "chat"
+        turn_id = "chat-turn-42"
+        question = "Pouvez-vous préciser votre expérience ?"
+        app.session_state["messages"].append({
+            "role": "user", "content": question, "turn_id": turn_id,
+        })
+        app.session_state["chat_pending_turn"] = {
+            "id": turn_id, "question": question, "language": "fr",
+        }
+
+        with patch("rag_pipeline.ask", side_effect=RuntimeError("provider unavailable")) as ask:
+            app.run()
+
+        self.assertEqual(list(app.exception), [])
+        ask.assert_called_once()
+        self.assertNotIn("chat_pending_turn", app.session_state)
+        fallback = [message for message in app.session_state["messages"]
+                    if message.get("role") == "assistant" and message.get("turn_id") == turn_id]
+        self.assertEqual(len(fallback), 1)
+        self.assertIn("n’a pas pu être générée", fallback[0]["content"])
+
+    def test_opening_chat_without_a_turn_does_not_persist_pending_or_scroll_state(self):
+        app = self.app()
+        self.assertNotIn("chat_pending_turn", app.session_state)
+        self.assertNotIn("chat_scroll_turn", app.session_state)
+        app.session_state["current_tab"] = "chat"
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertNotIn("chat_pending_turn", app.session_state)
+        self.assertNotIn("chat_scroll_turn", app.session_state)
+
+    def test_switching_to_english_clears_pending_chat_state_and_resets_history(self):
+        app = self.app()
+        app.session_state["current_tab"] = "chat"
+        app.session_state["messages"] = [
+            {"role": "assistant", "content": "Ancienne réponse"},
+            {"role": "user", "content": "Question en attente", "turn_id": "chat-turn-9"},
+        ]
+        app.session_state["chat_pending_turn"] = {
+            "id": "chat-turn-9", "question": "Question en attente", "language": "fr",
+        }
+        app.session_state["chat_scroll_turn"] = "chat-turn-9"
+
+        app.radio(key="lang_radio").set_value("EN").run()
+
+        self.assertEqual(list(app.exception), [])
+        self.assertNotIn("chat_pending_turn", app.session_state)
+        self.assertNotIn("chat_scroll_turn", app.session_state)
+        self.assertEqual(app.session_state["messages"], [{"role": "assistant", "content": WELCOME_EN}])
 
     def test_chat_passes_question_language_and_business_facts_separately(self):
         app = self.app()

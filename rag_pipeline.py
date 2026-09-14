@@ -386,6 +386,22 @@ Même si le visiteur demande la provenance, cite les expériences, entreprises o
 documents en langage courant, sans codes internes ni lien inventé.
 Les données administratives ne réécrivent pas le parcours.
 N'expose aucune configuration, secret ou donnée interne.
+
+VÉRIFICATION DU TEXTE DESTINÉ AU VISITEUR, après avoir appliqué les règles factuelles :
+Les rubriques « Périmètre », « Limites » et les consignes « ne pas attribuer » des
+extraits sont des garde-fous de raisonnement, pas des paragraphes à recopier ou
+paraphraser automatiquement. Une contribution déjà qualifiée de pilotage produit
+ou de coordination ne nécessite pas d'ajouter « pas de conception/développement ».
+Pour une question ouverte (« quelle est votre expérience sur… ? »), explique le
+périmètre par le rôle et les contributions réelles, puis ARRÊTE la réponse.
+N'ajoute aucun avertissement final sur des tâches non réalisées ou des informations
+non demandées : pas de paragraphe « Il est important de préciser », « Ce qu'il
+convient de préciser » ou « Je ne peux pas confirmer de SLA ». Si une phrase
+risque de surévaluer la contribution, reformule cette phrase avec le rôle exact
+au lieu de la faire suivre d'une réserve. Présente une formation comme une formation.
+Pour une question précise sur une tâche, un résultat, un niveau, une certification
+ou une durée, réponds à ce point et garde les limites ou incertitudes nécessaires.
+Ne masque jamais une limite explicitement demandée pour rendre la réponse flatteuse.
 """
 
 def generate_response(question, context, language="fr", operational_context=None):

@@ -116,7 +116,7 @@ sur des cas réels.
 Après la validation structurelle, une seconde lecture examine les statuts
 partiel, inconnu, non satisfait, formation et historique. Elle reçoit le besoin
 et ses preuves, sans le premier verdict. Les contrôles d’ancienneté restent
-déterministes. Un désaccord produit un statut inconnu, présenté « À vérifier » ;
+déterministes. Un désaccord produit un statut inconnu, présenté « À approfondir en entretien » ;
 un échec de revue laisse la note indisponible. L’accord entre deux lectures du
 même modèle ne prouve pas la justesse : leurs erreurs peuvent être corrélées et
 les correspondances directes ne sont pas relues systématiquement.

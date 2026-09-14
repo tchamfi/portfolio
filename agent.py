@@ -519,8 +519,10 @@ def _apply_review(first, second, language="fr"):
     sources = {item["id"]: item for item in first["evidence"] + second["evidence"]}
     row.update(status="unknown", review_status="disputed", uncovered_aspects=[], noncompliance_evidence=[],
                evidence_ids=list(sources), evidence=list(sources.values()),
-               justification=("I would need to clarify my experience against this precise requirement before confirming the match."
-                              if language == "en" else "Je dois préciser mon expérience au regard de cette exigence avant de confirmer la correspondance."))
+               justification=("I can clarify this point in an interview. The available information does not yet establish "
+                              "a direct match with this precise requirement."
+                              if language == "en" else "Je pourrai préciser ce point en entretien. Les éléments disponibles "
+                              "ne permettent pas encore d’établir une correspondance directe avec cette exigence précise."))
     return row
 
 

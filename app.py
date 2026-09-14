@@ -26,18 +26,63 @@ st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷"
 CHAT_PENDING_KEY = "chat_pending_turn"
 CHAT_SCROLL_KEY = "chat_scroll_turn"
 CHAT_TURN_SEQUENCE_KEY = "chat_turn_sequence"
+MATCHING_SCORE_GREEN_MIN = 70
+MATCHING_SCORE_BROWN_MIN = 50
+MATCHING_SCORE_COLORS = {"high": "#16a34a", "mid": "#d97706", "low": "#dc2626"}
+MATCHING_SCORE_BACKGROUNDS = {
+    "high": "rgba(34,197,94,.08)",
+    "mid": "rgba(217,119,6,.08)",
+    "low": "rgba(220,38,38,.08)",
+}
 
 
 st.markdown(CSS, unsafe_allow_html=True)
 
+
+def _matching_score_tone(score):
+    """Use the same public score threshold everywhere it is displayed."""
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        value = 0
+    if value >= MATCHING_SCORE_GREEN_MIN:
+        return "high"
+    if value >= MATCHING_SCORE_BROWN_MIN:
+        return "mid"
+    return "low"
+
+
+def _matching_unknown_explanation(requirement, language):
+    """Keep uncertainty honest while making it useful to a recruiter."""
+    if requirement.get("review_status") == "disputed":
+        return (
+            "I have relevant elements in my experience. The portfolio does not yet describe them in enough detail "
+            "to establish a direct match with this precise requirement. I can expand on them in an interview."
+            if language == "en" else
+            "J’ai des éléments de parcours liés à ce sujet. Le portfolio ne les détaille pas encore suffisamment "
+            "pour établir une correspondance directe avec cette exigence précise. Je pourrai les préciser en entretien."
+        )
+    if not (requirement.get("evidence_ids") or requirement.get("evidence")):
+        return (
+            "I can clarify this point in an interview. The portfolio does not yet contain enough specific information "
+            "to document it."
+            if language == "en" else
+            "Je pourrai préciser ce point en entretien. Le portfolio ne contient pas encore d’élément suffisamment "
+            "précis pour le documenter."
+        )
+    return requirement.get("justification", "")
+
+
 def _matching_explanation(requirement, language):
-    """Express verified tenure in Lionel's voice; keep the calculation internal."""
+    """Render a concise, recruiter-facing explanation without exposing engine jargon."""
     if requirement.get("assessment_valid") is False:
         return ("I could not assess this point. Please try the analysis again." if language == "en"
                 else "Je n’ai pas pu évaluer ce point. Vous pouvez relancer l’analyse.")
     check = requirement.get("experience_check") or {}
     months, minimum = check.get("counted_months"), check.get("required_years")
     if not isinstance(months, int) or not isinstance(minimum, (int, float)):
+        if requirement.get("status") == "unknown":
+            return _matching_unknown_explanation(requirement, language)
         return requirement.get("justification", "")
     years, remainder = divmod(months, 12)
     if language == "en":
@@ -49,7 +94,8 @@ def _matching_explanation(requirement, language):
         text = f"I have about {' and '.join(parts)} of experience {scope}."
         threshold = f"{minimum:g} year{'s' if minimum != 1 else ''}"
         if check.get("status") == "unknown":
-            text += f" I still need to confirm the exact dates to establish whether I meet your {threshold} requirement."
+            text += (f" To compare this duration with your {threshold} requirement, the dates and scope to include "
+                     "need to be clarified. I can expand on them in an interview.")
         elif check.get("status") == "not_met":
             text += f" That is less than the {threshold} you are looking for."
         else:
@@ -64,7 +110,8 @@ def _matching_explanation(requirement, language):
         threshold = f"{minimum:g} an{'s' if minimum != 1 else ''}"
         target = "l’année demandée" if minimum == 1 else f"les {threshold} que vous recherchez"
         if check.get("status") == "unknown":
-            text += f" Je dois encore préciser les dates exactes pour confirmer que j’atteins {target}."
+            text += (f" Pour comparer cette durée à {target}, les dates et le périmètre à retenir méritent d’être "
+                     "précisés. Je pourrai les détailler en entretien.")
         elif check.get("status") == "not_met":
             text += f" C’est moins que {target}."
         else:
@@ -494,7 +541,7 @@ if st.session_state.admin_view and is_private:
 
             # Score section
             if matchings:
-                sc_color = "#16a34a" if avg_score >= 80 else ("#d97706" if avg_score >= 60 else "#dc2626")
+                sc_color = MATCHING_SCORE_COLORS[_matching_score_tone(avg_score)]
                 st.markdown(f'<div style="background:#f8fafc;border-radius:16px;padding:24px;margin-bottom:1.5rem;border:1px solid #e2e8f0"><div style="font-size:.85rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px">Score Matching</div><div style="display:flex;gap:24px;align-items:center"><div style="text-align:center;min-width:100px"><div style="font-size:2.5rem;font-weight:900;color:{sc_color}">{avg_score}</div><div style="font-size:.75rem;color:#94a3b8">Moyenne /100</div></div><div style="flex:1;background:#e2e8f0;border-radius:100px;height:12px;overflow:hidden"><div style="width:{avg_score}%;height:100%;background:{sc_color};border-radius:100px"></div></div><div style="display:flex;gap:16px"><div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#16a34a">{max_score}</div><div style="font-size:.7rem;color:#94a3b8">Max</div></div><div style="text-align:center"><div style="font-size:1.2rem;font-weight:700;color:#d97706">{min_score}</div><div style="font-size:.7rem;color:#94a3b8">Min</div></div></div></div></div>', unsafe_allow_html=True)
 
             # LLM Monitoring
@@ -627,8 +674,9 @@ if st.session_state.admin_view and is_private:
                 match_start = match_page * MATCH_PAGE_SIZE
                 for m in matchings[match_start:match_start+MATCH_PAGE_SIZE]:
                     sc = m.get("score", 0) or 0
-                    sc_col = "#16a34a" if sc >= 80 else ("#d97706" if sc >= 60 else "#dc2626")
-                    sc_bg = "rgba(34,197,94,.08)" if sc >= 80 else ("rgba(217,119,6,.08)" if sc >= 60 else "rgba(220,38,38,.08)")
+                    score_tone = _matching_score_tone(sc)
+                    sc_col = MATCHING_SCORE_COLORS[score_tone]
+                    sc_bg = MATCHING_SCORE_BACKGROUNDS[score_tone]
                     em_html = f'<span style="display:block;margin-top:4px;font-size:.75rem;color:#6366f1">📧 {m.get("email")}</span>' if m.get("email") else ""
                     date_str = m.get("date", "")
                     poste = m.get("poste", "Sans titre")
@@ -1020,7 +1068,7 @@ if "matching" in tab_dict:
                                        if requirement_count == 1 else
                                        ("Match with the supplied criteria" if lang == "en" else "Correspondance avec les critères fournis"))
                         score_value = max(0, min(100, int(score)))
-                        score_tone = "high" if score_value >= 75 else "mid" if score_value >= 50 else "low"
+                        score_tone = _matching_score_tone(score_value)
                         st.markdown(
                             f'<div class="matching-score"><div class="matching-score-ring {score_tone}" '
                             f'style="--score:{score_value}" role="img" aria-label="{escape(score_label)} : {score_value}/100">'
@@ -1042,7 +1090,7 @@ if "matching" in tab_dict:
                         with st.expander("View prerequisites" if lang == "en" else "Consulter les prérequis"):
                             for prerequisite in prerequisites:
                                 st.markdown("**" + escape(prerequisite.get("text", "")) + "**")
-                                st.write(prerequisite.get("justification", ""))
+                                st.write(_matching_explanation(prerequisite, lang))
                     ambiguous_prerequisites = matching.get("prerequisite_ambiguities", [])
                     if ambiguous_prerequisites:
                         st.info("Some criteria contain conflicting mandatory and optional wording. Please clarify their priority." if lang == "en"
@@ -1052,7 +1100,7 @@ if "matching" in tab_dict:
                         "partial": "Partially covered" if lang == "en" else "Partiellement couvert",
                         "training": "Training" if lang == "en" else "Formation",
                         "historical": "Historical experience" if lang == "en" else "Expérience historique",
-                        "unknown": "To clarify" if lang == "en" else "À préciser",
+                        "unknown": "To explore in interview" if lang == "en" else "À approfondir en entretien",
                         "not_met": "Not met" if lang == "en" else "Non satisfait",
                     }
                     groups = (
@@ -1103,7 +1151,7 @@ if "matching" in tab_dict:
                                     for requirement in rows[start:end]:
                                         label = status_labels.get(requirement.get("status"), status_labels["unknown"])
                                         if requirement.get("review_status") == "disputed":
-                                            label = "Needs review" if lang == "en" else "À vérifier"
+                                            label = "To explore in interview" if lang == "en" else "À approfondir en entretien"
                                         importance = ("Optional" if lang == "en" else "Optionnel") if requirement.get("importance") == "optional" else ("Required" if lang == "en" else "Requis")
                                         if requirement.get("critical_ambiguity"):
                                             importance = "Priority to clarify" if lang == "en" else "Priorité à préciser"

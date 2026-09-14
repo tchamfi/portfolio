@@ -99,19 +99,43 @@ class AppIntegrationTests(unittest.TestCase):
         app = self.app()
         app.session_state["current_tab"] = "matching"
         row = {"requirement_id": "R001", "text": "Certification obligatoire", "status": "unknown",
-               "review_status": "disputed", "importance": "required", "justification": "Je dois préciser ce point."}
+               "review_status": "disputed", "importance": "required",
+               "justification": "Je dois préciser mon expérience au regard de cette exigence avant de confirmer la correspondance."}
         app.session_state["agent_results"] = {"matching": {"score_global": 95, "requirements": [row],
             "prerequisites": [dict(row, state="to_review")]}}
         app.run()
         self.assertEqual(list(app.exception), [])
         self.assertIn("95/100", self.matching_gauges(app)[0])
         self.assertTrue(any("1 à clarifier" in e.value for e in app.warning))
-        self.assertIn("À vérifier", self.matching_cards(app)[0])
+        card = self.matching_cards(app)[0]
+        self.assertIn("À approfondir en entretien", card)
+        self.assertIn("J’ai des éléments de parcours liés à ce sujet.", card)
+        self.assertIn("Le portfolio ne les détaille pas encore suffisamment", card)
+        self.assertIn("Je pourrai les préciser en entretien.", card)
+        self.assertNotIn("Je dois préciser mon expérience", card)
+        self.assertNotIn("confirmer la correspondance", card)
         self.assertFalse(any(e.label == "Signaler une correction" for e in app.expander))
         app.session_state["is_private"] = True
         app.run()
         self.assertEqual(list(app.exception), [])
         self.assertTrue(any(e.label == "Signaler une correction" for e in app.expander))
+
+    def test_matching_score_uses_amber_through_69_then_green_at_70(self):
+        """The public score colour must make the 50–69 / 70–100 boundary clear."""
+        requirement = {"text": "Backlog", "status": "direct", "importance": "required",
+                       "justification": "Je gère un backlog produit."}
+        for score, expected_tone in ((49, "low"), (50, "mid"), (69, "mid"), (70, "high")):
+            with self.subTest(score=score):
+                app = self.app()
+                app.session_state["current_tab"] = "matching"
+                app.session_state["agent_results"] = {
+                    "matching": {"score_global": score, "requirements": [requirement]},
+                    "job_analysis": {},
+                }
+                app.run()
+                self.assertEqual(list(app.exception), [])
+                gauge = self.matching_gauges(app)[0]
+                self.assertIn(f"matching-score-ring {expected_tone}", gauge)
 
     def test_high_score_does_not_hide_unknown_requirement(self):
         app = self.app()
@@ -128,7 +152,7 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertEqual(list(app.exception), [])
         card = self.matching_cards(app)[0]
         self.assertIn("Bruno", card)
-        self.assertIn("À préciser", card)
+        self.assertIn("À approfondir en entretien", card)
         self.assertNotIn("Non satisfait", card)
         self.assertTrue(any("Points d’attention" in m.value for m in app.markdown))
         self.assertIn("95/100", self.matching_gauges(app)[0])
@@ -187,8 +211,9 @@ class AppIntegrationTests(unittest.TestCase):
         app.run()
         self.assertEqual(list(app.exception), [])
         summary = self.matching_cards(app)[0]
-        self.assertIn("À préciser", summary)
-        self.assertIn("Je dois encore préciser les dates exactes", summary)
+        self.assertIn("À approfondir en entretien", summary)
+        self.assertIn("Pour comparer cette durée", summary)
+        self.assertIn("Je pourrai les détailler en entretien", summary)
         self.assertNotIn("Je couvre donc", summary)
 
     def test_cards_escape_offer_and_model_markup_and_keep_unknown_separate_from_gap(self):
@@ -209,7 +234,7 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", gap)
         self.assertNotIn("<img", gap)
         self.assertNotIn("<script", gap)
-        self.assertIn("À préciser", unknown)
+        self.assertIn("À approfondir en entretien", unknown)
         self.assertIn("Optionnel", unknown)
         self.assertNotIn("Non satisfait", unknown)
 
@@ -254,7 +279,7 @@ class AppIntegrationTests(unittest.TestCase):
 
             app.button(key="matching_page_attention_next").click().run()
             self.assertEqual(point_numbers(labels[1], "attention"), [4])
-            self.assertIn("À préciser", cards_in(labels[1])[0])
+            self.assertIn("À approfondir en entretien", cards_in(labels[1])[0])
             self.assertNotIn("Non satisfait", cards_in(labels[1])[0])
             self.assertTrue(app.button(key="matching_page_attention_next").disabled)
             self.assertEqual(point_numbers(labels[0], "positive"), [7, 8])

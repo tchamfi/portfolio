@@ -103,6 +103,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(row["review_status"], "disputed")
         self.assertTrue(row["assessment_valid"])
         self.assertTrue(row["justification"].startswith("Je "))
+        self.assertIn("en entretien", row["justification"])
+        self.assertNotIn("avant de confirmer", row["justification"])
         self.assertNotIn("ne maîtrise pas", row["justification"])
         self.assertEqual(row["review"]["initial"]["status"], "unknown")
         self.assertEqual(row["review"]["second"]["status"], "direct")

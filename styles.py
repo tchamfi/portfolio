@@ -127,6 +127,10 @@ CSS = """
     .chat-bubble *{color:#334155!important;}
     .bubble-bot{background:#f8fafc;border:1px solid rgba(0,0,0,.04);border-top-left-radius:4px;}
     .bubble-user{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.1);border-top-right-radius:4px;}
+    .chat-pending .bubble-bot{background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.18);color:#475569!important;}
+    .chat-pending-dot{display:inline-block;width:8px;height:8px;margin:0 8px 1px 0;border-radius:999px;background:#6366f1;vertical-align:middle;animation:chat-pulse 1.1s ease-in-out infinite;}
+    @keyframes chat-pulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+    .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;}
 
     /* Champ de question du chat (form inline, scope via placeholder pour ne pas toucher aux autres champs) */
     div[data-testid="stTextInput"]:has(input[placeholder*="AWS"]),

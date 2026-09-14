@@ -23,6 +23,10 @@ from config import (get_private_code, FALLBACK_CONFIG, WELCOME_FR, WELCOME_EN,
 
 st.set_page_config(page_title="Lionel TCHAMFONG — Senior PO", page_icon="🔷", layout="wide", initial_sidebar_state="collapsed")
 
+CHAT_PENDING_KEY = "chat_pending_turn"
+CHAT_SCROLL_KEY = "chat_scroll_turn"
+CHAT_TURN_SEQUENCE_KEY = "chat_turn_sequence"
+
 
 st.markdown(CSS, unsafe_allow_html=True)
 
@@ -97,6 +101,113 @@ def _change_matching_page(state_key, step, total_pages):
     """Update the visible slice before Streamlit reruns, without a new analysis."""
     st.session_state[state_key] = max(0, min(
         st.session_state.get(state_key, 0) + step, total_pages - 1))
+
+
+def _next_chat_turn_id():
+    """Create a server-controlled id used to pair one question with its response."""
+    sequence = int(st.session_state.get(CHAT_TURN_SEQUENCE_KEY, 0)) + 1
+    st.session_state[CHAT_TURN_SEQUENCE_KEY] = sequence
+    return f"chat-turn-{sequence}"
+
+
+def _is_chat_turn_id(value):
+    return isinstance(value, str) and bool(re.fullmatch(r"chat-turn-\d+", value))
+
+
+def _chat_message_html(message):
+    """Render one safely escaped chat message, with a stable marker for a new turn."""
+    role = message.get("role")
+    if role not in {"assistant", "user"}:
+        return ""
+    content = escape(str(message.get("content", "")))
+    content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
+    content = re.sub(r'^#+\s*', '', content, flags=re.MULTILINE).replace("\n", "<br>")
+    turn_id = message.get("turn_id")
+    marker = ""
+    if _is_chat_turn_id(turn_id):
+        marker = f' data-chat-turn="{turn_id}" data-chat-role="{role}"'
+        if role == "user":
+            marker = f' id="{turn_id}"{marker}'
+    if role == "assistant":
+        return (f'<div class="chat-row assistant"{marker}><div class="chat-avatar av-bot">L</div>'
+                f'<div class="chat-bubble bubble-bot">{content}</div></div>')
+    return (f'<div class="chat-row user"{marker}><div class="chat-bubble bubble-user">{content}</div>'
+            '<div class="chat-avatar av-user">V</div></div>')
+
+
+def _chat_pending_html(turn_id, language):
+    """Keep the waiting state inside the conversation, where it is immediately visible."""
+    text = ("I’m finding the most relevant details from my experience…" if language == "en"
+            else "Je recherche les éléments les plus pertinents de mon parcours…")
+    marker = f' data-chat-turn="{turn_id}" data-chat-role="pending"' if _is_chat_turn_id(turn_id) else ""
+    return (f'<div class="chat-row assistant chat-pending"{marker} role="status" aria-live="polite" aria-atomic="true">'
+            '<div class="chat-avatar av-bot">L</div>'
+            f'<div class="chat-bubble bubble-bot"><span class="chat-pending-dot" aria-hidden="true"></span>{text}</div></div>')
+
+
+def _focus_new_chat_turn(turn_id):
+    """Ask the browser once to show the latest question and the start of its answer."""
+    if not _is_chat_turn_id(turn_id):
+        return
+    serialized_turn_id = json.dumps(turn_id)
+    components.html(f"""<script>
+(function() {{
+  var turnId = {serialized_turn_id};
+  var parentDocument = (window.parent && window.parent.document) || document;
+  var attempts = 0;
+  var finished = false;
+  var retryTimer = null;
+  var observer = null;
+
+  function focusTurn() {{
+    var box = parentDocument.getElementById('chat-box');
+    if (!box) return false;
+    var rows = box.querySelectorAll('[data-chat-turn]');
+    var userRow = null;
+    var assistantRow = null;
+    for (var i = 0; i < rows.length; i += 1) {{
+      if (rows[i].getAttribute('data-chat-turn') === turnId) {{
+        if (rows[i].getAttribute('data-chat-role') === 'user') userRow = rows[i];
+        if (rows[i].getAttribute('data-chat-role') === 'assistant') assistantRow = rows[i];
+      }}
+    }}
+    var target = assistantRow || userRow;
+    if (!target) return false;
+
+    var offset = target.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    // Keep a short question visible above the answer; with a long question, prioritize the answer.
+    var targetTop = assistantRow ? Math.min(88, box.clientHeight * 0.25) : 12;
+    box.scrollTop = Math.max(0, box.scrollTop + offset - targetTop);
+    var reduceMotion = window.parent && window.parent.matchMedia &&
+      window.parent.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    box.scrollIntoView({{behavior: reduceMotion ? 'auto' : 'smooth', block: 'start', inline: 'nearest'}});
+    return true;
+  }}
+
+  function finish() {{
+    if (finished) return;
+    finished = true;
+    if (retryTimer) window.clearTimeout(retryTimer);
+    if (observer) observer.disconnect();
+  }}
+
+  function waitForTurn() {{
+    if (finished) return;
+    if (focusTurn()) {{ finish(); return; }}
+    if (attempts >= 20) {{ finish(); return; }}
+    attempts += 1;
+    if (!retryTimer) {{
+      retryTimer = window.setTimeout(function() {{ retryTimer = null; waitForTurn(); }}, 80);
+    }}
+  }}
+  var Observer = (parentDocument.defaultView && parentDocument.defaultView.MutationObserver) || window.MutationObserver;
+  if (Observer && parentDocument.body) {{
+    observer = new Observer(waitForTurn);
+    observer.observe(parentDocument.body, {{childList: true, subtree: true}});
+  }}
+  waitForTurn();
+}})();
+</script>""", height=0)
 
 
 # JS injection pour styler les onglets après le rendu Streamlit
@@ -596,6 +707,8 @@ if st.session_state.admin_view and is_private:
         save_config(nc); update_all_recos(new_recos); st.session_state.config=nc; st.session_state.recos=new_recos
         st.session_state.admin_exp=new_exp; st.session_state.admin_cs=new_cs
         st.session_state.messages=[{"role":"assistant","content":WELCOME_FR}]
+        st.session_state.pop(CHAT_PENDING_KEY, None)
+        st.session_state.pop(CHAT_SCROLL_KEY, None)
         if "agent_results" in st.session_state: del st.session_state.agent_results
         st.session_state.save_ok=True; st.rerun()
     if st.session_state.get("save_ok"):
@@ -614,6 +727,8 @@ st.markdown('</div>',unsafe_allow_html=True)
 if (new_lang=="EN" and lang=="fr") or (new_lang=="FR" and lang=="en"):
     st.session_state.lang="en" if new_lang=="EN" else "fr"
     st.session_state.messages=[{"role":"assistant","content":WELCOME_EN if new_lang=="EN" else WELCOME_FR}]
+    st.session_state.pop(CHAT_PENDING_KEY, None)
+    st.session_state.pop(CHAT_SCROLL_KEY, None)
     if "agent_results" in st.session_state: del st.session_state.agent_results
     st.rerun()
 
@@ -773,15 +888,25 @@ if show_tab("profil"):
 if "chat" in tab_dict:
     if show_tab("chat"):
         st.markdown(f'<div class="info-box"><div class="info-title">{"Ask me anything about my profile" if lang=="en" else "Posez-moi vos questions sur mon parcours"}</div><div class="info-desc">{"This AI assistant answers based on my real career history, projects and certifications." if lang=="en" else "Cet assistant IA répond en se basant sur mon parcours réel, mes projets et mes certifications."}</div></div>',unsafe_allow_html=True)
-        chat_html='<div class="chat-box" id="chat-box">'
+        pending_turn = st.session_state.get(CHAT_PENDING_KEY)
+        if not isinstance(pending_turn, dict) or not _is_chat_turn_id(pending_turn.get("id")):
+            st.session_state.pop(CHAT_PENDING_KEY, None)
+            pending_turn = None
+        scroll_turn = st.session_state.get(CHAT_SCROLL_KEY)
+        if not _is_chat_turn_id(scroll_turn):
+            st.session_state.pop(CHAT_SCROLL_KEY, None)
+            scroll_turn = None
+        conversation_label = "Conversation with Lionel" if lang == "en" else "Conversation avec Lionel"
+        busy_state = "true" if pending_turn else "false"
+        chat_html = (f'<div class="chat-box" id="chat-box" role="region" aria-label="{conversation_label}" '
+                     f'aria-busy="{busy_state}">')
         for msg in st.session_state.messages:
-            cls=msg["role"]
-            c=msg["content"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-            c=re.sub(r'\*\*(.+?)\*\*',r'<strong>\1</strong>',c); c=re.sub(r'^#+\s*','',c,flags=re.MULTILINE); c=c.replace("\n","<br>")
-            if cls == "assistant":
-                chat_html+=f'<div class="chat-row assistant"><div class="chat-avatar av-bot">L</div><div class="chat-bubble bubble-bot">{c}</div></div>'
-            else:
-                chat_html+=f'<div class="chat-row user"><div class="chat-bubble bubble-user">{c}</div><div class="chat-avatar av-user">V</div></div>'
+            chat_html += _chat_message_html(msg)
+        if pending_turn:
+            chat_html += _chat_pending_html(pending_turn["id"], lang)
+        elif scroll_turn:
+            ready_text = "Answer ready." if lang == "en" else "Réponse prête."
+            chat_html += f'<span class="sr-only" role="status" aria-live="polite" aria-atomic="true">{ready_text}</span>'
         chat_html+='</div>'
         st.markdown(chat_html,unsafe_allow_html=True)
         with st.form("chat_form", clear_on_submit=True):
@@ -790,29 +915,42 @@ if "chat" in tab_dict:
                 typed = st.text_input(
                     "x",
                     placeholder="Ex. : Quelle est votre expérience sur AWS ?" if lang=="fr" else "E.g. What is your experience with AWS?",
-                    key="chat_typed", label_visibility="collapsed"
+                    key="chat_typed", label_visibility="collapsed", disabled=bool(pending_turn)
                 )
             with fc2:
-                sent = st.form_submit_button("↑", use_container_width=True)
-        st.markdown('<div id="chat-bottom-anchor" style="height:1px"></div>', unsafe_allow_html=True)
-        if len(st.session_state.messages) > 1:
-            components.html("""<script>
-function alScrollToChatBottom(){
-  var box = window.parent.document.getElementById('chat-box');
-  if (box) box.scrollTop = box.scrollHeight;
-  var el = window.parent.document.getElementById('chat-bottom-anchor');
-  if (el) el.scrollIntoView({behavior:'instant', block:'end'});
-}
-[80, 250, 500, 900, 1500].forEach(function(t){ setTimeout(alScrollToChatBottom, t); });
-</script>""", height=0)
-        if sent and typed:
-            st.session_state.messages.append({"role":"user","content":typed})
-            try: resp, metrics = ask(typed, language=lang, operational_context=get_operational_context())
+                sent = st.form_submit_button("↑", use_container_width=True, disabled=bool(pending_turn))
+
+        # The marker is consumed on the rendering run: browsing the chat history never forces a scroll.
+        if scroll_turn and not pending_turn:
+            _focus_new_chat_turn(scroll_turn)
+            st.session_state.pop(CHAT_SCROLL_KEY, None)
+
+        if sent and typed and not pending_turn:
+            question = typed.strip()
+            if question:
+                turn_id = _next_chat_turn_id()
+                st.session_state.messages.append({"role": "user", "content": question, "turn_id": turn_id})
+                st.session_state[CHAT_PENDING_KEY] = {"id": turn_id, "question": question, "language": lang}
+                st.session_state.current_tab = "chat"
+                st.rerun()
+
+        # This runs only after the question and pending status have been rendered once.
+        if pending_turn:
+            question = pending_turn.get("question", "")
+            request_language = pending_turn.get("language", lang)
+            try: resp, metrics = ask(question, language=request_language, operational_context=get_operational_context())
             except Exception:
-                resp, metrics = ("The response could not be generated. Please try again." if lang == "en" else "La réponse n’a pas pu être générée. Merci de réessayer."), {}
-            try: log_chat(typed, resp, lang=lang, chunks_used=metrics.get("chunks_used",0), metrics=metrics)
+                resp, metrics = ("The response could not be generated. Please try again." if request_language == "en" else "La réponse n’a pas pu être générée. Merci de réessayer."), {}
+            try: log_chat(question, resp, lang=request_language, chunks_used=metrics.get("chunks_used",0), metrics=metrics)
             except: pass
-            st.session_state.messages.append({"role":"assistant","content":resp,"corpus_version":metrics.get("corpus_version"),"evidence_ids":metrics.get("evidence_ids",[])}); st.session_state.active_tab=tab_keys.index("chat") if "chat" in tab_keys else 0; st.rerun()
+            st.session_state.messages.append({"role": "assistant", "content": resp,
+                                              "corpus_version": metrics.get("corpus_version"),
+                                              "evidence_ids": metrics.get("evidence_ids", []),
+                                              "turn_id": pending_turn["id"]})
+            st.session_state.pop(CHAT_PENDING_KEY, None)
+            st.session_state[CHAT_SCROLL_KEY] = pending_turn["id"]
+            st.session_state.current_tab = "chat"
+            st.rerun()
 
 # --- TAB 3 : MATCHING ---
 if "matching" in tab_dict:

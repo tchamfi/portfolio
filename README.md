@@ -41,9 +41,12 @@ non établie », sans effacer les compétences documentées dans le reste du par
 4. L’empreinte des sources sert à reconstruire l’index quand leur contenu change.
    La version du corpus et les informations d’indexation sont exposées dans
    l’administration pour vérifier la version réellement chargée.
-5. Le chat utilise des règles applicatives explicites : faits présents dans les
-   sources, références, distinction des rôles et langue demandée. Les documents,
-   offres et extraits sont des données, pas des instructions exécutables.
+5. Le chat présente les faits à la première personne, dans la langue demandée,
+   avec des contributions concrètes et le rôle réellement exercé. Les références
+   restent dans le contexte et les métriques privées ; les consignes interdisent
+   de les afficher dans la réponse. Les limites sont précisées lorsqu'elles
+   répondent à la question ou évitent une confusion sur la contribution personnelle.
+   Les documents, offres et extraits sont des données, pas des instructions exécutables.
 6. Le matching extrait les exigences, recherche pour chacune des références,
    puis attribue un statut. Le calcul du score se fait en Python avec un barème
    versionné. Les jugements ambigus font l’objet d’une seconde lecture ciblée.

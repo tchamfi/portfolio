@@ -789,7 +789,7 @@ if "chat" in tab_dict:
             with fc1:
                 typed = st.text_input(
                     "x",
-                    placeholder="Ex: Quelle est son experience AWS ?" if lang=="fr" else "Ex: What is his experience with cloud platforms?",
+                    placeholder="Ex. : Quelle est votre expérience sur AWS ?" if lang=="fr" else "E.g. What is your experience with AWS?",
                     key="chat_typed", label_visibility="collapsed"
                 )
             with fc2:

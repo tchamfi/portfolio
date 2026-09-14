@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
+from pathlib import Path
 import re
 import threading
 import time
@@ -35,6 +36,7 @@ MAX_NOTES_CHARS = 30_000
 _lock = threading.RLock()
 _cache = {}
 _bootstrap_completed = set()
+INITIAL_FACTS_PATH = Path(__file__).resolve().parent / "knowledge" / "initial_facts.json"
 
 
 class KnowledgeError(RuntimeError):
@@ -376,7 +378,7 @@ def restore_fact(fact_id, revision, expected_revision=None):
 
 
 def bootstrap_initial_facts():
-    """One-time migration of the owner's explicitly confirmed Jira/Trello facts.
+    """One-time migration of owner-approved facts into the editable journal.
 
     Called explicitly by app startup. Existing journals, including archives and
     unpublished drafts, are never changed. A failed write is not acknowledged as
@@ -385,24 +387,30 @@ def bootstrap_initial_facts():
     token = _token()
     if not token:
         return False
-    key = (airtable_store.BASE_ID, airtable_store.CONFIG_TABLE, hashlib.sha256(token.encode()).hexdigest())
+    try:
+        seed_text = INITIAL_FACTS_PATH.read_text(encoding="utf-8")
+        seeds = json.loads(seed_text, object_pairs_hook=_unique_object)
+        if not isinstance(seeds, list) or any(not isinstance(item, dict) or set(item) != {"id", "fields"} for item in seeds):
+            raise ValueError("Invalid initial facts")
+        initial = [(_fact_id(item["id"]), _business(item["fields"])) for item in seeds]
+        if len({identifier for identifier, _ in initial}) != len(initial):
+            raise ValueError("Duplicate initial fact")
+    except (OSError, ValueError, TypeError):
+        raise KnowledgeError("Les connaissances initiales sont invalides.", "K422") from None
+    key = (airtable_store.BASE_ID, airtable_store.CONFIG_TABLE, hashlib.sha256(token.encode()).hexdigest(),
+           hashlib.sha256(seed_text.encode()).hexdigest())
     with _lock:
         if key in _bootstrap_completed:
             return True
-        initial = (
-            ("K6a6972610001", "Jira", ["GRDF", "BNP Paribas Personal Finance"],
-             "J’ai utilisé Jira chez GRDF et je l’utilise actuellement chez BNP Paribas Personal Finance."),
-            ("K7472656c6c6f", "Trello", ["Enedis"], "J’ai utilisé Trello chez Enedis."),
-        )
         journal = _journal(force=True)
-        for fact_id, title, companies, statement in initial:
+        for fact_id, business in initial:
             if fact_id in journal:
                 continue
-            business = _business({
-                "kind": "tool", "title": title, "companies": companies,
-                "statement": statement, "practice": "professional", "keywords": [title],
-                "limits": "Fonctions avancées et durée précise non renseignées.",
-            })
+            if business["correction_of"]:
+                # Called after module initialization by app startup. Reuse the
+                # editor's exact-scope/overlap validation before writing a seed.
+                from rag_pipeline import validate_knowledge_publication
+                validate_knowledge_publication(dict(business, id=fact_id))
             draft = _append(business, "draft", fact_id, [])
             publish_fact(fact_id, expected_revision=draft["revision"])
             journal = _journal(force=True)

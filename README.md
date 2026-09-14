@@ -286,8 +286,22 @@ le matching, les réserves, les références et les métadonnées de version.
 Jira chez GRDF et BNP Paribas Personal Finance, ainsi que Trello chez Enedis,
 sont initialisés à partir des précisions de Lionel. Leur publication confirme
 une pratique professionnelle, sans inventer de niveau d’administration avancée
-ni de durée précise. Cette migration ne remplace jamais une fiche existante,
-y compris archivée. Elle utilise le token Airtable existant.
+ni de durée précise. La fiche **AWS — EyeCloud et SSP chez EssilorLuxottica**
+complète les deux produits hébergés sur AWS : architecture EyeCloud multi-région
+(API Gateway, ALB, ASG, AuthZ/PostgreSQL, S3 et DynamoDB Global Table), application
+SSP Angular/ASP.NET sur EC2 avec ASG et ALB, et WAF sur les deux produits.
+Le schéma fourni concerne EyeCloud ; les détails SSP et WAF viennent des précisions
+directes de Lionel. Ces composants décrivent l’environnement de ses responsabilités
+PO ; ils ne prouvent pas un rôle de développeur ou d’administrateur AWS.
+
+Les fiches initiales sont des données dans `knowledge/initial_facts.json`.
+La migration ne remplace jamais une fiche existante, y compris un brouillon ou
+une archive, et utilise le token Airtable existant. Les changements ultérieurs
+se font depuis **Connaissances IA**, sur la fiche publiée. La fiche AWS corrige
+exactement le paragraphe initial de C17 dans le corpus effectif, en préservant
+ses autres contributions, limites et références. Cette correction est validée
+avant son premier enregistrement. La nouvelle empreinte du corpus invalide les
+anciens résultats de matching ; les anciennes réponses de chat restent historiques.
 
 Une modification enregistrée en brouillon laisse la dernière version publiée
 active. **Archiver** la retire ; **Restaurer** prépare un brouillon à republier.

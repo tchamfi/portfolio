@@ -58,6 +58,47 @@ class AppIntegrationTests(unittest.TestCase):
         self.assertFalse(any(widget.key == "a_annees_exp" for widget in app.number_input))
         self.assertFalse(any(widget.key == "llm_sev" for widget in app.selectbox))
         self.assertTrue(any("compétences" in m.value for m in app.markdown))
+        self.assertTrue(any(tab.label == "🧠 Connaissances IA" for tab in app.tabs))
+
+    def test_knowledge_failure_keeps_admin_reachable_and_removes_old_score(self):
+        app = self.app()
+        app.session_state["agent_results"] = self.long_matching_result()
+        with patch("rag_pipeline.get_knowledge_status", side_effect=ValueError("Invalid correction")):
+            app.run()
+            self.assertEqual(list(app.exception), [])
+            self.assertNotIn("agent_results", app.session_state)
+            self.assertTrue(any("temporairement indisponible" in e.value for e in app.error))
+            app.session_state["is_private"] = True
+            app.session_state["admin_view"] = True
+            app.run()
+            self.assertEqual(list(app.exception), [])
+            self.assertTrue(any(tab.label == "🧠 Connaissances IA" for tab in app.tabs))
+
+    def test_admin_view_alone_does_not_grant_private_editing(self):
+        app = self.app()
+        app.session_state["admin_view"] = True
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertFalse(any(tab.label == "🧠 Connaissances IA" for tab in app.tabs))
+        self.assertFalse(any(button.key == "a_save" for button in app.button))
+
+    def test_prerequisite_visible_at_high_score_and_disagreement_needs_review(self):
+        app = self.app()
+        app.session_state["current_tab"] = "matching"
+        row = {"requirement_id": "R001", "text": "Certification obligatoire", "status": "unknown",
+               "review_status": "disputed", "importance": "required", "justification": "Je dois préciser ce point."}
+        app.session_state["agent_results"] = {"matching": {"score_global": 95, "requirements": [row],
+            "prerequisites": [dict(row, state="to_review")]}}
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertIn("95/100", self.matching_gauges(app)[0])
+        self.assertTrue(any("1 à clarifier" in e.value for e in app.warning))
+        self.assertIn("À vérifier", self.matching_cards(app)[0])
+        self.assertFalse(any(e.label == "Signaler une correction" for e in app.expander))
+        app.session_state["is_private"] = True
+        app.run()
+        self.assertEqual(list(app.exception), [])
+        self.assertTrue(any(e.label == "Signaler une correction" for e in app.expander))
 
     def test_high_score_does_not_hide_unknown_requirement(self):
         app = self.app()

@@ -185,13 +185,17 @@ class MatchingCacheTests(unittest.TestCase):
         self.get.return_value = response([
             {"id": "recTitle", "fields": {"Name": "hero_title", "Notes": "Product Owner"}},
             record(),
+            {"id": "recKnowledge", "fields": {"Name": airtable_store.KNOWLEDGE_PREFIX + "K123456789abc:revision", "Notes": "Private editorial draft"}},
         ])
         config = airtable_store.load_config()
         self.assertEqual(config["hero_title"], "Product Owner")
         self.assertEqual(config["_record_ids"], {"hero_title": "recTitle"})
         self.assertNotIn(airtable_store.MATCHING_CACHE_PREFIX + KEY, config)
+        self.assertFalse(any(name.startswith(airtable_store.KNOWLEDGE_PREFIX) for name in config))
         formula = self.get.call_args.kwargs["params"]["filterByFormula"]
-        self.assertEqual(formula, f'LEFT({{Name}}, {len(airtable_store.MATCHING_CACHE_PREFIX)}) != "{airtable_store.MATCHING_CACHE_PREFIX}"')
+        exclusions = [f'LEFT({{Name}}, {len(prefix)}) != "{prefix}"'
+                      for prefix in (airtable_store.MATCHING_CACHE_PREFIX, airtable_store.KNOWLEDGE_PREFIX)]
+        self.assertEqual(formula, "AND(" + ", ".join(exclusions) + ")")
 
     def test_analytics_provenance_retains_evaluation_identity_and_cache_origin(self):
         metadata = {"evaluation_key": KEY, "cache_origin": "persistent", "extraction_version": "v2", "requirement_signature": "c" * 64}

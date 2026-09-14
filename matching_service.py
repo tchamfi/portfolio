@@ -16,7 +16,7 @@ import agent
 from matching_cache import CacheUnavailable, get_cached_matching, save_cached_matching
 from rag_pipeline import get_evidence_by_ids, get_knowledge_status
 
-SERVICE_VERSION = "validated-matching-v1"
+SERVICE_VERSION = "reviewed-matching-v2"
 _MEMORY = OrderedDict()
 _MEMORY_LOCK = threading.RLock()
 _KEY_LOCKS = [threading.RLock() for _ in range(32)]
@@ -31,7 +31,7 @@ def _digest(value):
 def _implementation_fingerprint():
     root = Path(__file__).resolve().parent
     names = ("agent.py", "rag_pipeline.py", "doc_loader.py", "experience.py", "llm_provider.py",
-             "matching_service.py", "matching_cache.py")
+             "matching_service.py", "matching_cache.py", "knowledge_store.py", "hybrid_retrieval.py")
     return _digest({name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names})
 
 
@@ -48,6 +48,7 @@ def _context(status, config):
             "corpus": status.get("fingerprint"), "experience": status.get("experience_fingerprint"),
             "as_of": period, "scoring": agent.SCORING_VERSION,
             "assessment": agent.ASSESSMENT_VERSION, "extraction": agent.EXTRACTION_VERSION,
+            "review": agent.REVIEW_VERSION,
             "model_config": deepcopy(config)}
 
 
@@ -94,6 +95,8 @@ def _validate_result(result, job_text):
                     or unicodedata.normalize("NFC", row.get("text", "")) != requirement["text"]
                     or row.get("importance") != requirement["importance"]
                     or row.get("kind") != requirement["kind"]
+                    or any(row.get(flag) != requirement[flag] for flag in (
+                        "critical", "critical_quote", "critical_ambiguity"))
                     or row.get("status") not in agent.STATUS_CREDIT):
                 raise ValueError("Assessment no longer matches its requirements")
             ids = row.get("evidence_ids")
@@ -102,6 +105,10 @@ def _validate_result(result, job_text):
         score = matching.get("score_global")
         if isinstance(score, bool) or not isinstance(score, (int, float)) or score != agent._compute_score(rows):
             raise ValueError("Invalid score")
+        summary = agent._summarize_matching(rows)
+        if any(matching.get(key) != summary[key] for key in (
+                "prerequisites", "prerequisite_ambiguities", "review_version", "reviewed_count", "disputed_count")):
+            raise ValueError("Invalid prerequisite or review summary")
     except (ValueError, TypeError, KeyError) as exc:
         raise CacheUnavailable("Invalid assessment snapshot") from exc
 
@@ -110,7 +117,12 @@ def _compact(result, key, context, language):
     result = deepcopy(result)
     # The source texts already exist in the versioned corpus. Preserve their IDs
     # and hydrate them on read instead of duplicating large blocks in Airtable.
-    result.pop("profile_context", None)
+    source_context = result.pop("profile_context", None)
+    if not isinstance(source_context, dict):
+        raise CacheUnavailable("Missing candidate provenance")
+    result["candidate_evidence_ids"] = {
+        requirement["id"]: [item["id"] for item in source_context.get(requirement["id"], [])]
+        for requirement in result["job_analysis"]["requirements"]}
     for row in result["matching"]["requirements"]:
         row.pop("evidence", None)
     return {"version": SERVICE_VERSION, "key": key, "context": context,
@@ -131,26 +143,40 @@ def _restore(snapshot, key, context, language, job_text):
         raise CacheUnavailable("Invalid snapshot timestamp") from None
     result = deepcopy(snapshot["result"])
     _validate_result(result, job_text)
-    ids = {i for row in result["matching"]["requirements"] for i in row.get("evidence_ids", [])}
+    candidates = result.get("candidate_evidence_ids")
+    requirements = result["job_analysis"]["requirements"]
+    if (not isinstance(candidates, dict) or set(candidates) != {r["id"] for r in requirements}
+            or any(not isinstance(values, list) or len(values) > agent.TOP_K
+                   or any(not isinstance(value, str) for value in values)
+                   or len(values) != len(set(values)) for values in candidates.values())):
+        raise CacheUnavailable("Invalid candidate provenance")
+    ids = {identifier for values in candidates.values() for identifier in values}
     evidence = {item["id"]: item for item in get_evidence_by_ids(sorted(ids))}
     if set(evidence) != ids:
         raise CacheUnavailable("Snapshot evidence no longer available")
     result["profile_context"] = {}
     for row in result["matching"]["requirements"]:
+        allowed = candidates[row["requirement_id"]]
+        if any(identifier not in allowed for identifier in row["evidence_ids"]):
+            raise CacheUnavailable("Snapshot citation outside its original candidate set")
         row["evidence"] = [{"id": i, "text": evidence[i]["text"],
                             "metadata": deepcopy(evidence[i]["metadata"])} for i in row.get("evidence_ids", [])]
-        result["profile_context"][row["requirement_id"]] = deepcopy(row["evidence"])
-    requirements = result["job_analysis"]["requirements"]
-    current_evidence = agent.query_rag_profile(requirements)
+        result["profile_context"][row["requirement_id"]] = [deepcopy(evidence[i]) for i in allowed]
+    # Retrieve only the recorded candidates by ID. Re-running semantic search on
+    # a cache hit would add cost and could reject a stable result due to drift.
     for requirement, row in zip(requirements, result["matching"]["requirements"]):
         if requirement["kind"] == "experience":
             exp = requirement["experience"]
             check = agent.evaluate_experience_requirement(exp["minimum_years"], exp["scope"])
             expected = {"meets": "direct", "not_met": "not_met"}.get(check["status"], "unknown")
-            if row["status"] != expected or row.get("experience_check", {}).get("counted_months") != check["counted_months"]:
+            if (row["status"] != expected or row.get("experience_check", {}).get("counted_months") != check["counted_months"]
+                    or row.get("review_status") != "deterministic" or "review" in row):
                 raise CacheUnavailable("Snapshot tenure no longer matches the reference")
-        elif not agent._validate_judgment(requirement, row, current_evidence.get(requirement["id"], []), language=language)["assessment_valid"]:
-            raise CacheUnavailable("Snapshot assessment no longer validates")
+        else:
+            current_evidence = result["profile_context"][requirement["id"]]
+            if (not agent._validate_judgment(requirement, row, current_evidence, language=language)["assessment_valid"]
+                    or not agent._validate_review(row, requirement, current_evidence, language)):
+                raise CacheUnavailable("Snapshot assessment or review no longer validates")
     return result
 
 

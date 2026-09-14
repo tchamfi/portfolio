@@ -11,6 +11,7 @@ CONFIG_TABLE = "tblGMmMaP8Z00HkLE"
 RECOS_TABLE = "tblayphpRLIXktphw"
 API_URL = "https://api.airtable.com/v0"
 MATCHING_CACHE_PREFIX = "__matching_cache_v1__:"
+KNOWLEDGE_PREFIX = "__knowledge_v1__:"
 
 def get_token():
     try: return st.secrets["AIRTABLE_TOKEN"]
@@ -26,7 +27,10 @@ def load_config():
         # Filter before pagination so cached offers cannot crowd out profile fields.
         resp = requests.get(url, headers=headers(), params={
             "pageSize": 100,
-            "filterByFormula": f'LEFT({{Name}}, {len(MATCHING_CACHE_PREFIX)}) != "{MATCHING_CACHE_PREFIX}"',
+            "filterByFormula": (
+                f'AND(LEFT({{Name}}, {len(MATCHING_CACHE_PREFIX)}) != "{MATCHING_CACHE_PREFIX}", '
+                f'LEFT({{Name}}, {len(KNOWLEDGE_PREFIX)}) != "{KNOWLEDGE_PREFIX}")'
+            ),
         }, timeout=10)
         resp.raise_for_status(); data = resp.json()
     except Exception as e:
@@ -36,7 +40,7 @@ def load_config():
     for rec in data.get("records", []):
         fields = rec.get("fields", {})
         key = fields.get("Name", "").strip(); val = fields.get("Notes", "")
-        if key.startswith(MATCHING_CACHE_PREFIX): continue
+        if key.startswith((MATCHING_CACHE_PREFIX, KNOWLEDGE_PREFIX)): continue
         if key: config[key] = val; record_ids[key] = rec["id"]
 
     for i in range(1, 5):
@@ -62,7 +66,8 @@ def save_config(config):
     for k in ["tjm","disponibilite","remote","linkedin","email","phone","calendly",
               "profil_p1","profil_p2","profil_p3","profil_p4",
               "profil_p1_en","profil_p2_en","profil_p3_en","profil_p4_en",
-              "hero_name","hero_title","hero_tagline_fr","hero_tagline_en","hero_badges"]:
+              "hero_name","hero_title","hero_tagline_fr","hero_tagline_en","hero_badges",
+              "llm_model","llm_temp_chat","llm_temp_matching","llm_top_k","llm_max_tokens_chat","llm_max_tokens_matching"]:
         if k in config: kv[k] = str(config[k])
     for bk in ["show_tjm","show_phone","show_profil","show_metrics","show_case_studies","show_parcours","show_recos","show_chat","show_matching","show_rdv"]:
         if bk in config: kv[bk] = "true" if config[bk] else "false"

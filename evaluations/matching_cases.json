@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "reference_date": "2026-09-14",
+  "description": "Cas métier de non-régression proposés à partir du référentiel V3 et des précisions confirmées par Lionel. Les statuts sont des attentes de recette, pas des résultats observés du modèle.",
+  "review_policy": "Relire les attentes lors d'une publication de nouvelles preuves. Le mode offline ne valide pas les décisions sémantiques du LLM. Les alternatives autorisées sont explicites et motivées ; unknown dû à un désaccord de revue reste signalé séparément.",
+  "cases": [
+    {
+      "id": "jira_professional_use",
+      "offer": "Utiliser Jira dans un contexte professionnel de Product Ownership.",
+      "source_basis": "Précision de Lionel : Jira utilisé chez GRDF puis BNP Paribas Personal Finance, sans durée ni administration avancée déclarées.",
+      "publication_terms": ["Jira", "GRDF", "BNP"],
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["Jira", "GRDF", "BNP"], "forbidden_claim_patterns": ["(?:dix|10) ans (?:avec|sur|de pratique de) Jira", "j.administre Jira"], "reason": "La pratique professionnelle est confirmée directement par Lionel ; aucun niveau supérieur ne doit être ajouté."}
+    },
+    {
+      "id": "trello_professional_use",
+      "offer": "Utiliser Trello dans un contexte professionnel.",
+      "source_basis": "Précision de Lionel : Trello utilisé chez Enedis.",
+      "publication_terms": ["Trello", "Enedis"],
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["Trello", "Enedis"], "forbidden_claim_patterns": ["Trello chez (?:EPSA|BNP|GRDF)"], "reason": "L'expérience Enedis ne doit pas être déclassée du seul fait de son ancienneté ni réattribuée à un autre employeur."}
+    },
+    {
+      "id": "jira_advanced_administration",
+      "offer": "Administration avancée de Jira obligatoire : configurer les workflows et les permissions.",
+      "source_basis": "Précision Jira de Lionel, limitée à l'utilisation professionnelle chez GRDF et BNP.",
+      "publication_terms": ["Jira", "GRDF", "BNP"],
+      "expected": {"statuses": ["unknown"], "kind": "skill", "importance": "required", "critical": true, "evidence_terms": [], "forbidden_claim_patterns": ["j.ai configuré (?:les |des )?workflows", "je maîtrise l.administration avancée", "je n.ai jamais administré Jira"], "reason": "La pratique d'un outil ne démontre pas l'administration ; l'absence de détail n'établit pas une incapacité."}
+    },
+    {
+      "id": "jira_scoped_years",
+      "offer": "5 ans d'expérience avec Jira.",
+      "source_basis": "Les précisions Jira ne comportent pas de dates d'utilisation ; knowledge/experience.json exclut l'attribution des années PO à chaque outil.",
+      "duration": {"minimum_years": 5, "scope": "tool", "expected_check": "unknown"},
+      "expected": {"statuses": ["unknown"], "kind": "experience", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["(?:dix|10) ans (?:avec|sur|de) Jira"], "reason": "Un seuil sur Jira ne peut pas être comparé à la durée totale Product Owner."}
+    },
+    {
+      "id": "api_tool_alternative",
+      "offer": "Tester des APIs avec Postman ou Insomnia.",
+      "source_basis": "C02, T01 : pratique API avec Postman confirmée, Insomnia non documenté.",
+      "retrieval": {"any_ids": ["C02", "T01"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["Postman"], "forbidden_claim_patterns": ["j.utilise (?:aussi )?Insomnia", "je maîtrise Insomnia"], "reason": "Le ou explicite permet de satisfaire le besoin avec Postman sans inventer Insomnia."}
+    },
+    {
+      "id": "api_tools_conjunction",
+      "offer": "Tester des APIs avec Postman et Insomnia, les deux outils étant obligatoires.",
+      "source_basis": "C02, T01 : Postman est attribué ; le corpus ne décrit pas Insomnia.",
+      "retrieval": {"any_ids": ["C02", "T01"]},
+      "expected": {"statuses": ["partial"], "kind": "skill", "importance": "required", "critical": true, "evidence_terms": ["Postman"], "forbidden_claim_patterns": ["j.utilise (?:aussi )?Insomnia", "je ne maîtrise pas Insomnia"], "reason": "Postman couvre un aspect explicite du besoin, Insomnia reste à confirmer ; cela justifie partial sans absence affirmée."}
+    },
+    {
+      "id": "qa_frontend_backend_strategy",
+      "offer": "Rédiger les stratégies et les plans de test frontend et backend.",
+      "source_basis": "C01, U01 : expertise QA directement confirmée, avant et pendant le parcours PO.",
+      "retrieval": {"any_ids": ["C01"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["frontend", "backend"], "forbidden_claim_patterns": ["uniquement (?:une )?formation QA", "je n.ai pas exécuté de tests"], "reason": "Le manque d'un rapport d'exécution joint ne retire pas les contributions QA attribuées."}
+    },
+    {
+      "id": "three_api_tools",
+      "offer": "Pratique des tests d'APIs avec Postman, SoapUI et Bruno.",
+      "source_basis": "C02, U01, L07 : les trois outils sont confirmés ; Bruno n'est pas daté ni attribué rétrospectivement à Orange.",
+      "retrieval": {"any_ids": ["C02", "T01"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["Postman", "SoapUI", "Bruno"], "forbidden_claim_patterns": ["Bruno chez Orange", "Bruno chez Bouygues", "(?:dix|10) ans (?:avec|de) Bruno"], "reason": "Reconnaître les trois pratiques confirmées sans inventer leur ancienneté ou leur employeur."}
+    },
+    {
+      "id": "po_ten_years",
+      "offer": "10 ans d'expérience Product Owner.",
+      "source_basis": "knowledge/experience.json : union datée Enedis, GRDF, EssilorLuxottica, EPSA, Generali et BNP PF.",
+      "duration": {"minimum_years": 10, "scope": "product_owner", "expected_check": "meets"},
+      "expected": {"statuses": ["direct"], "kind": "experience", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["10 ans (?:chez|de PO chez) EPSA"], "reason": "Le cumul concerne toutes les missions PO avec suppression des mois en chevauchement."}
+    },
+    {
+      "id": "data_po_five_years",
+      "offer": "5 ans d'expérience Product Owner data.",
+      "source_basis": "knowledge/experience.json : EPSA janvier 2025 à février 2026, 14 mois calendaires de PO data.",
+      "duration": {"minimum_years": 5, "scope": "data_product_owner", "expected_check": "not_met"},
+      "expected": {"statuses": ["not_met"], "kind": "experience", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["(?:10|dix) ans (?:de |en )?Product Owner data"], "reason": "La durée PO globale ne couvre pas un seuil spécifique PO data."}
+    },
+    {
+      "id": "qa_ten_years",
+      "offer": "10 ans d'expérience QA.",
+      "source_basis": "knowledge/experience.json : seuls les rôles QA explicites chez IER, Bouygues et Orange entrent dans ce périmètre.",
+      "duration": {"minimum_years": 10, "scope": "qa", "expected_check": "not_met"},
+      "expected": {"statuses": ["not_met"], "kind": "experience", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["(?:quinze|15) ans (?:de |en )?QA"], "reason": "La pratique de recette pendant les missions PO ne transforme pas toutes les années IT en années de poste QA."}
+    },
+    {
+      "id": "data_transformation_acceptance",
+      "offer": "Vérifier que les règles de transformation des données sont correctement implémentées.",
+      "source_basis": "C13, U02 : responsabilité de validation fonctionnelle des transformations attribuée chez EPSA.",
+      "retrieval": {"any_ids": ["C13", "E02", "Q03"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["EPSA", "transformation"], "forbidden_claim_patterns": ["j.ai (?:codé|développé|construit) (?:les |des )?pipelines"], "reason": "L'activité demandée est la validation ; ne pas inventer une exigence de développement pour la déclasser."}
+    },
+    {
+      "id": "pipeline_engineering",
+      "offer": "Développer soi-même des pipelines d'ingestion en production.",
+      "source_basis": "C12, C13, U02 : la construction des pipelines EPSA était confiée aux Data Engineers ; aucune autre réalisation technique équivalente n'est établie.",
+      "retrieval": {"any_ids": ["C12", "C13", "Q03", "E02"]},
+      "expected": {"statuses": ["unknown"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["j.ai (?:codé|développé|construit) (?:les |des )?pipelines", "je n.ai jamais (?:codé|développé|construit)"], "reason": "La limite explicite EPSA n'établit ni pratique de développement ni absence de cette pratique sur toute la carrière."}
+    },
+    {
+      "id": "multicrm_product_leadership",
+      "offer": "Piloter la centralisation des données de plusieurs CRM et accompagner les filiales.",
+      "source_basis": "C12, C14, E02, U02 : pilotage de plateforme centrale et coordination des filiales chez EPSA.",
+      "retrieval": {"any_ids": ["C12", "C14", "E02"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["EPSA", "filiales"], "forbidden_claim_patterns": ["toutes les filiales sont connectées", "100 ?% des CRM"], "reason": "Le rôle produit est confirmé ; l'achèvement total du déploiement groupe ne l'est pas."}
+    },
+    {
+      "id": "hr_application_delivery",
+      "offer": "Avoir livré une application web RH validée en recette, mise en production et adoptée par les RH.",
+      "source_basis": "C05, C16, E03, U03 : résultat explicitement confirmé par Lionel pour l'application RH EPSA.",
+      "retrieval": {"any_ids": ["C16", "E03", "Q04"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["EPSA", "production", "adopt"], "forbidden_claim_patterns": ["adoption de 100 ?%", "production non confirmée", "uniquement documenté"], "reason": "Conserver le résultat livré et adopté, sans inventer de taux d'adoption."}
+    },
+    {
+      "id": "aws_api_product",
+      "offer": "Piloter un produit API reposant sur une architecture AWS multi-région.",
+      "source_basis": "C17, E04, L05 : évolution d'API et coordination technique chez EssilorLuxottica.",
+      "retrieval": {"any_ids": ["C17", "E04"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["AWS", "Essilor"], "forbidden_claim_patterns": ["j.ai personnellement architecturé", "j.ai développé seul"], "reason": "L'exigence porte sur le pilotage produit, pas sur la réalisation individuelle de l'architecture."}
+    },
+    {
+      "id": "aws_advanced_certification",
+      "offer": "Certification AWS Solutions Architect Professional obligatoire.",
+      "source_basis": "Section 7 V3 : AWS Cloud Practitioner est mentionnée ; Solutions Architect Professional ne l'est pas.",
+      "expected": {"statuses": ["unknown"], "kind": "skill", "importance": "required", "critical": true, "evidence_terms": [], "forbidden_claim_patterns": ["je suis certifié AWS Solutions Architect", "je ne possède pas (?:la |cette )?certification"], "reason": "Une certification AWS différente ne vaut pas équivalence ; le silence du catalogue n'établit pas l'absence."}
+    },
+    {
+      "id": "english_international_coordination",
+      "offer": "Coordonner en anglais des équipes internationales de développement.",
+      "source_basis": "C11, E04, Q08 : coordination en anglais en Inde et avec plusieurs pays, puis équipe distribuée BNP PF.",
+      "retrieval": {"any_ids": ["C11", "Q08", "E04"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["anglais"], "forbidden_claim_patterns": ["anglais natif", "certifié C2", "bilingue de naissance"], "reason": "L'usage international est attribué, sans déduire de certification CECRL ni de statut natif."}
+    },
+    {
+      "id": "spanish_mandatory",
+      "offer": "Espagnol courant obligatoire.",
+      "source_basis": "Les sources V3 mentionnent le français et la coordination en anglais ; elles n'établissent pas un niveau d'espagnol.",
+      "expected": {"statuses": ["unknown"], "kind": "language", "importance": "required", "critical": true, "evidence_terms": [], "forbidden_claim_patterns": ["je (?:ne )?parle pas espagnol", "je maîtrise l.espagnol", "je ne maîtrise pas l.espagnol"], "reason": "Un prérequis explicite doit être visible comme à clarifier, sans inventer ni maîtrise ni absence de maîtrise."}
+    },
+    {
+      "id": "english_certified_c2",
+      "offer": "Anglais C2 certifié obligatoire.",
+      "source_basis": "C11 : coordination en anglais avancé, avec limite explicite sur l'extrapolation vers un niveau CECRL certifié.",
+      "expected": {"statuses": ["unknown", "partial"], "kind": "language", "importance": "required", "critical": true, "evidence_terms": [], "forbidden_claim_patterns": ["je suis certifié C2", "mon niveau C2 est certifié"], "reason": "Unknown est acceptable pour le niveau certifié non établi ; partial est acceptable uniquement en distinguant l'usage anglais prouvé de la certification manquante dans les sources."}
+    },
+    {
+      "id": "wsjf_backlog_priority",
+      "offer": "Prioriser le backlog en appliquant la méthode WSJF.",
+      "source_basis": "C08, E06, L02 : WSJF chez BNP Paribas Personal Finance.",
+      "retrieval": {"any_ids": ["C08", "E06", "Q06"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["WSJF", "BNP"], "forbidden_claim_patterns": ["certifié SAFe", "transformation SAFe de toute l.entreprise"], "reason": "La pratique WSJF ne démontre pas une certification SAFe ni une transformation Agile à l'échelle."}
+    },
+    {
+      "id": "roadmap_release_planning",
+      "offer": "Roadmap produit : plan stratégique décrivant les évolutions du produit sur le long terme.",
+      "source_basis": "C09, L04, L05 : roadmap, release planning et delivery chez EPSA et EssilorLuxottica.",
+      "retrieval": {"any_ids": ["C09"]},
+      "expected": {"statuses": ["direct"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": ["roadmap"], "forbidden_claim_patterns": [], "reason": "Une description longue et générique ne doit pas écarter le bloc de compétence Roadmap."}
+    },
+    {
+      "id": "offensive_pentest_execution",
+      "offer": "Réaliser personnellement des tests d'intrusion offensifs.",
+      "source_basis": "C18, E04, L05 : coordination des campagnes de pentest et des remédiations, exécution offensive non attribuée.",
+      "retrieval": {"any_ids": ["C18", "E04", "Q05"]},
+      "expected": {"statuses": ["unknown"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["j.ai réalisé (?:personnellement )?(?:des |les )?tests d.intrusion", "je suis pentester", "je n.ai jamais réalisé de pentest"], "reason": "La coordination est une preuve différente de la réalisation offensive ; aucune absence sur toute la carrière n'est établie."}
+    },
+    {
+      "id": "databricks_advanced_certification_optional",
+      "offer": "Certification Databricks Data Engineer Professional appréciée.",
+      "source_basis": "Section 7 V3 : Databricks Fundamentals, sans assimilation à une certification avancée Data Engineer.",
+      "expected": {"statuses": ["unknown"], "kind": "skill", "importance": "optional", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["je suis certifié Databricks Data Engineer Professional", "Fundamentals équivaut"], "reason": "Une formation fondamentale ne satisfait pas une certification avancée ; apprécié conserve le poids optionnel."}
+    },
+    {
+      "id": "machine_learning_production",
+      "offer": "Développer et déployer des modèles de machine learning en production.",
+      "source_basis": "C25, T11, formation Jedha : SQL, Python, ML en formation, sans projet industriel précis étayé dans les seules sources autorisées.",
+      "retrieval": {"any_ids": ["C25", "T11"]},
+      "expected": {"statuses": ["training", "unknown"], "kind": "skill", "importance": "required", "critical": false, "evidence_terms": [], "forbidden_claim_patterns": ["j.ai déployé (?:des |un )?modèles? .* en production", "(?:précision|accuracy|AUC) de [0-9]", "j.ai développé XGBoost"], "reason": "Training est recevable pour les connaissances ML acquises ; unknown l'est pour la pratique en production non établie. Direct ou partial prétendrait une réalisation professionnelle absente des sources."}
+    }
+  ],
+  "full_offer": {
+    "id": "actual_po_agile_offer",
+    "path": "tests/fixtures/po_agile_offer.txt",
+    "expected_requirement_count": 12,
+    "expected_count_reason": "Découpage de recette issu de l'offre réelle précédemment analysée : backlog dédoublonné, livrables et responsabilités distinctes. Une différence de découpage doit être revue, pas automatiquement corrigée pour viser ce nombre.",
+    "expected_semantic_groups": [
+      {"name": "backlog_priorities_quality", "anchors": ["Product Backlog", "Backlog produit", "Gestion de backlog"], "maximum_rows": 1},
+      {"name": "scope_decisions", "anchors": ["décisions sur le périmètre"]},
+      {"name": "roadmap", "anchors": ["Roadmap produit"]},
+      {"name": "specifications", "anchors": ["Cahiers des charges"]},
+      {"name": "progress_reports", "anchors": ["Rapports d'avancement"]},
+      {"name": "deliverable_acceptance", "anchors": ["Validation des livrables"]},
+      {"name": "market_users_competition", "anchors": ["Expertise produit"]},
+      {"name": "agile_tools", "anchors": ["Outils Agile"]},
+      {"name": "stakeholder_communication", "anchors": ["Communication"]},
+      {"name": "user_needs", "anchors": ["Analyse des besoins utilisateurs"]},
+      {"name": "business_alignment", "anchors": ["Vision stratégique"]},
+      {"name": "testing", "anchors": ["Tests et validation"]}
+    ],
+    "excluded_fragments": ["2 équipes de développement de 3 personnes", "1 architecte", "1 Scrum Master", "1 référent qualification", "Sensibilisation aux prat"],
+    "expected_incomplete_fragment": "Sensibilisation aux prat",
+    "score_expectation": null,
+    "score_reason": "Aucun 79/100 figé : les ajouts Jira/Trello et les nouvelles preuves justifient une nouvelle évaluation. Vérifier la formule depuis les statuts réellement obtenus, sans imposer un score cible."
+  }
+}

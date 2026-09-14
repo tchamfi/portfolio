@@ -8,13 +8,15 @@ from copy import deepcopy
 
 from experience import evaluate_experience_requirement
 from llm_provider import complete as llm_complete
-from rag_pipeline import get_knowledge_status, search_evidence
+from rag_pipeline import get_knowledge_status, search_evidence, search_matching_evidence
 
 TOP_K = 5
 BATCH_SIZE = 8
 SCORING_VERSION = "requirements-v1"
-EXTRACTION_VERSION = "offer-structure-v2"
-ASSESSMENT_VERSION = "requested-role-v4"
+EXTRACTION_VERSION = "offer-prerequisites-v3"
+ASSESSMENT_VERSION = "requested-role-reviewed-v5"
+REVIEW_VERSION = "blinded-targeted-v1"
+REVIEW_STATUSES = {"partial", "unknown", "not_met", "training", "historical"}
 STATUS_CREDIT = {"direct": 1, "partial": .5, "training": .25,
                  "historical": .25, "unknown": 0, "not_met": 0}
 IMPORTANCE_WEIGHT = {"required": 3, "optional": 1}
@@ -59,6 +61,36 @@ def _fold(text):
                    if unicodedata.category(c) != "Mn")
 
 
+def _critical_requirement(text, importance):
+    """Bind prerequisite flags to affirmative wording in this exact excerpt.
+
+    Required is a default scoring weight, not proof of an explicit prerequisite.
+    Conflicting optional wording stays visible as ambiguity rather than turning
+    an uncertain instruction into a disqualifying requirement.
+    """
+    obligation = re.compile(
+        r"\b(?:obligatoires?|imp[ée]rati(?:f|fs|ve|ves)|indispensables?|"
+        r"exig[ée](?:e?s?)|requis(?:e?s?)|mandatory|essential|required|"
+        r"must(?:[ -]have)?|non[ -]n[ée]gociables?)\b", re.I)
+    optional = re.search(
+        r"\b(?:souhait[ée](?:e?s?)|appr[ée]ci[ée](?:e?s?)|facultati(?:f|fs|ve|ves)|"
+        r"optionnel(?:le)?s?|optional|preferred|nice[ -]to[ -]have)\b", text, re.I)
+    positive, negated = [], False
+    for marker in obligation.finditer(text):
+        before = re.split(r"[.;:\n]|\b(?:mais|but|however)\b", text[:marker.start()], flags=re.I)[-1]
+        negative = bool(re.search(
+            r"\b(?:non|pas|not|never|sans|no|without|aucun|aucune)\b(?:\s+[\w’'-]+){0,3}\s*$", before, re.I))
+        negative = negative or bool(re.match(r"\s+not\b", text[marker.end():], re.I))
+        if negative:
+            negated = True
+        else:
+            positive.append(marker.group())
+    ambiguous = bool(positive) and (bool(optional) or negated or importance == "optional")
+    return {"critical": bool(positive) and not ambiguous,
+            "critical_quote": positive[0] if positive else "",
+            "critical_ambiguity": ambiguous}
+
+
 _DURATION_PATTERN = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:[-–—a]\s*\d+(?:[.,]\d+)?\s*)?\+?\s*(ans?|annees?|years?|yrs?|mois|months?)\b")
 
 
@@ -82,7 +114,9 @@ def _has_scope_qualifier(text):
     generic = set("""a as au aux avec comme d de des du en et experience experiences
         professionnelle professionnel professionnelles professionnels professional
         relevant pertinente pertinentes pertinents pertinent requise requises requis
-        required exigee exigees exige minimum minimale minimal minimums min moins least
+        required exigee exigees exige obligatoire obligatoires imperatif imperatifs
+        imperative imperatives indispensable indispensables mandatory essential
+        minimum minimale minimal minimums min moins least
         at plus more over than of the une un le la les l dans domaine tant que qu
         total totale cumule cumulee cumulees cumules senior confirme confirmee
         environ approximately around about posseder avoir justifier justifiez
@@ -150,6 +184,11 @@ def _validate_extraction(data, job_text):
         seen.add(key)
         row = {"id": f"R{len(normalized) + 1:03d}", "text": text.strip(),
                "importance": item["importance"], "kind": item["kind"]}
+        row.update(_critical_requirement(row["text"], row["importance"]))
+        if row["critical_ambiguity"]:
+            # A contradictory obligation/preference is an editorial ambiguity,
+            # not a reason to add an arbitrary barrier to the candidature.
+            row["importance"] = "optional"
         if item["kind"] == "experience":
             exp = item.get("experience")
             if not isinstance(exp, dict) or exp.get("scope") not in SCOPES:
@@ -235,6 +274,9 @@ son extrait exact dans incomplete_excerpts, sans critère ni points associés.
 Un intitulé court mais complet comme « Scrum » reste une exigence exploitable.
 importance = optional seulement si explicitement optionnelle (apprécié, souhaité,
 nice to have...) ; sinon required. Ne rétrograde pas une exigence obligatoire.
+Conserve dans text les mentions exactes d'obligation (obligatoire, impératif,
+requis, mandatory, must have) et leurs négations. Ne retire pas ces mentions de
+l'extrait : le code détectera les prérequis explicites à partir de cette citation.
 kind = skill, experience (durée minimale explicite), language ou constraint.
 Une fourchette 5-10 ans signifie minimum_years=5. Conserve le périmètre exact :
 total_it, product_owner, qa, data_product_owner, domain, tool ou unspecified.
@@ -287,8 +329,9 @@ def query_rag_profile(requirements):
 def _unknown(requirement, reason):
     return {"requirement_id": requirement["id"], "text": requirement["text"],
             "importance": requirement["importance"], "kind": requirement["kind"],
+            **_critical_requirement(requirement["text"], requirement["importance"]),
             "status": "unknown", "evidence_ids": [], "evidence": [], "uncovered_aspects": [],
-            "justification": reason, "assessment_valid": False}
+            "justification": reason, "assessment_valid": False, "review_status": "pending"}
 
 
 def _validate_judgment(requirement, judgment, evidence, language="fr"):
@@ -330,8 +373,60 @@ def _validate_judgment(requirement, judgment, evidence, language="fr"):
     row.update(status=judgment["status"], evidence_ids=ids,
                evidence=[{"id": i, "text": known[i].get("text", ""),
                           "metadata": deepcopy(known[i].get("metadata", {}))} for i in ids],
-               justification=reason.strip(), uncovered_aspects=deepcopy(uncovered), assessment_valid=True)
+               justification=reason.strip(), uncovered_aspects=deepcopy(uncovered), assessment_valid=True,
+               review_status="not_required" if judgment["status"] == "direct" else "pending")
     return row
+
+
+def _review_judgment(row):
+    """Private audit data; no duplicated corpus text in the durable snapshot."""
+    return {key: deepcopy(row[key]) for key in (
+        "requirement_id", "status", "evidence_ids", "uncovered_aspects", "justification")}
+
+
+def _apply_review(first, second, language="fr"):
+    """A disagreement expresses uncertainty, never an invented lack of skill."""
+    row = deepcopy(first)
+    row["review"] = {"version": REVIEW_VERSION, "initial": _review_judgment(first)}
+    if not second or not second.get("assessment_valid"):
+        row.update(assessment_valid=False, review_status="unavailable")
+        return row
+    row["review"]["second"] = _review_judgment(second)
+    def gaps(value):
+        return sorted({_normalise_space(a["requirement_quote"]) for a in value["uncovered_aspects"]})
+    agreement = first["status"] == second["status"]
+    if first["status"] in {"partial", "not_met"}:
+        agreement = agreement and gaps(first) == gaps(second)
+    if agreement:
+        row["review_status"] = "agreed"
+        return row
+    sources = {item["id"]: item for item in first["evidence"] + second["evidence"]}
+    row.update(status="unknown", review_status="disputed", uncovered_aspects=[],
+               evidence_ids=list(sources), evidence=list(sources.values()),
+               justification=("I would need to clarify my experience against this precise requirement before confirming the match."
+                              if language == "en" else "Je dois préciser mon expérience au regard de cette exigence avant de confirmer la correspondance."))
+    return row
+
+
+def _validate_review(row, requirement, evidence, language="fr"):
+    """Validate the stored review without re-interpreting it through another LLM."""
+    if row.get("review_status") == "not_required":
+        return row.get("status") == "direct" and "review" not in row
+    review = row.get("review")
+    if (row.get("review_status") not in {"agreed", "disputed"}
+            or not isinstance(review, dict) or review.get("version") != REVIEW_VERSION):
+        return False
+    initial = _validate_judgment(requirement, review.get("initial"), evidence, language)
+    second = _validate_judgment(requirement, review.get("second"), evidence, language)
+    if (not initial["assessment_valid"] or not second["assessment_valid"]
+            or initial["status"] not in REVIEW_STATUSES):
+        return False
+    if any(review.get(which, {}).get("requirement_id") != requirement["id"]
+           for which in ("initial", "second")):
+        return False
+    expected = _apply_review(initial, second, language)
+    return all(row.get(key) == expected[key] for key in (
+        "status", "review_status", "evidence_ids", "justification", "uncovered_aspects", "assessment_valid"))
 
 
 def _check_hard_constraints(rows, requirements, language="fr"):
@@ -358,6 +453,8 @@ def _check_hard_constraints(rows, requirements, language="fr"):
             if years is not None:
                 row["justification"] += f" Recorded duration: {years:g} years, with month-level date precision."
         row["assessment_valid"] = True
+        row["review_status"] = "deterministic"
+        row.pop("review", None)
         row.pop("validation_code", None)
         row["uncovered_aspects"] = ([{"requirement_quote": requirement["text"], "reason": row["justification"]}]
                                     if row["status"] == "not_met" else [])
@@ -384,7 +481,17 @@ def _summarize_matching(rows, language="fr"):
     # Never publish a lower fit score merely because one batch failed while
     # another succeeded. Valid "unknown" judgments still count in the score.
     unavailable = bool(rows) and assessed != len(rows)
+    prerequisites = [{key: deepcopy(r[key]) for key in (
+        "requirement_id", "text", "status", "critical_quote", "justification")}
+        | {"state": ("to_review" if not r["assessment_valid"] or r.get("review_status") == "disputed"
+                     else "confirmed_gap" if r["status"] == "not_met" else "to_clarify")}
+        for r in attention if r.get("critical")]
     return {"requirements": rows, "score_global": None if unavailable else _compute_score(rows),
+            "prerequisites": prerequisites,
+            "prerequisite_ambiguities": [r["text"] for r in rows if r.get("critical_ambiguity")],
+            "review_version": REVIEW_VERSION,
+            "reviewed_count": sum(r.get("review_status") in {"agreed", "disputed"} for r in rows),
+            "disputed_count": sum(r.get("review_status") == "disputed" for r in rows),
             "analysis_unavailable": unavailable,
             "analysis_message": (("Some criteria could not be assessed reliably. Please retry; no score was calculated." if language == "en" else "Certains critères n'ont pas pu être évalués de façon fiable. Relancez l'analyse ; aucun score n'a été calculé.") if unavailable else ""),
             "extraction_version": EXTRACTION_VERSION,
@@ -540,6 +647,32 @@ Pour un écart : "uncovered_aspects":[{"requirement_quote":"extrait exact de l'e
                 # Preserve valid rows for diagnostics, but the summary withholds
                 # the score while any assessment remains unvalidated.
                 pass
+        ambiguous = [r for r in batch if r["kind"] != "experience"
+                     and batch_rows[r["id"]]["assessment_valid"]
+                     and batch_rows[r["id"]]["status"] in REVIEW_STATUSES]
+        if ambiguous:
+            # Blind the second pass: neither the initial verdict nor its prose,
+            # gap claims or validation feedback is sent to the reviewer.
+            second_payload = {"job_title": job_analysis.get("titre", ""),
+                "requirements": [{**r, "evidence": profile_context.get(r["id"], [])}
+                                 for r in ambiguous]}
+            second_judgments = {}
+            try:
+                text, metrics = llm_complete(model=llm["model"],
+                    system=system + "\nEffectue une évaluation indépendante à partir des seules exigences et preuves reçues. Vérifie chaque aspect réellement demandé et ses limites sans chercher à confirmer une conclusion antérieure.",
+                    user_content=json.dumps(second_payload, ensure_ascii=False),
+                    max_tokens=max(4000, llm["max_tokens_matching"]), temperature=0)
+                all_metrics.append(metrics)
+                second_judgments = _parse_assessments(text, {r["id"] for r in ambiguous})
+            except Exception:
+                # A failed semantic review is not evidence against the person.
+                # It withholds the score and can be retried; it is never cached.
+                pass
+            for requirement in ambiguous:
+                identifier = requirement["id"]
+                second = _validate_judgment(requirement, second_judgments.get(identifier),
+                    profile_context.get(identifier, []), language)
+                batch_rows[identifier] = _apply_review(batch_rows[identifier], second, language)
         for requirement in batch:
             rows.append(batch_rows[requirement["id"]])
     return _summarize_matching(_check_hard_constraints(rows, requirements, language=language), language=language), _merge_metrics(all_metrics)
@@ -588,7 +721,9 @@ def run_agent(job_text, response_type="email", language="fr"):
         result["metrics"] = _merge_metrics(all_metrics)
         return result
     initial_status = get_knowledge_status()
-    evidence = query_rag_profile(analysis["requirements"])
+    evidence, retrieval_metrics = search_matching_evidence(
+        analysis["requirements"], _get_llm_config()["model"], language=language)
+    all_metrics.append(retrieval_metrics)
     result["profile_context"] = evidence
     result["steps"].append("Recherche et évaluation de chaque exigence…")
     matching, metrics = compute_matching(analysis, evidence, language=language)

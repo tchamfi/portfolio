@@ -72,6 +72,19 @@ Les identifiants des sources permettent de revenir au passage qui soutient
 une réponse. Ils ne constituent pas à eux seuls une vérification indépendante
 des déclarations professionnelles.
 
+Le chat contrôle aussi des dérives de réponse observées en recette : troisième
+personne, codes de référence visibles, réserves techniques ajoutées à une question
+générale et affirmations d'absence de certification. Si un contrôle se déclenche,
+une seule nouvelle rédaction est demandée avec les preuves originales. Le brouillon
+rejeté n'est jamais une preuve. Si la correction reste invalide ou échoue, une
+réponse d'incertitude remplace le brouillon ; il n'y a pas de troisième tentative.
+Le coût des deux appels réussis est comptabilisé et `response_review` conserve le
+diagnostic privé. Une réponse conforme ne déclenche pas d'appel supplémentaire.
+Ces contrôles linguistiques ciblent les régressions connues, sans prétendre vérifier
+toutes les paraphrases ou tous les faits. Les négations de possession de certification
+détectées sont traitées conservativement comme non confirmées : le chat ne dispose
+pas d'un registre exhaustif des qualifications détenues ou non détenues.
+
 ### Ancienneté et score
 
 Une exigence « huit ans comme PO » porte sur toutes les missions PO ; elle ne

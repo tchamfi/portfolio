@@ -13,6 +13,7 @@ from experience import experience_summary
 from llm_provider import complete as llm_complete
 from knowledge_store import published_snapshot
 from hybrid_retrieval import HybridRetrievalError, retrieve as hybrid_retrieve
+from chat_response import response_issues, safe_fallback
 
 TOP_K = 8
 _index = None
@@ -411,10 +412,55 @@ def generate_response(question, context, language="fr", operational_context=None
     language_rule = "Réponds entièrement en anglais." if language == "en" else "Réponds entièrement en français."
     payload = {"question": question, "knowledge_excerpts": context,
                "experience_summary": experience_summary(), "operational_facts": allowed}
-    return llm_complete(
+    text, metrics = llm_complete(
         model=llm["model"], system=CHAT_POLICY + "\n" + language_rule,
         user_content=json.dumps(payload, ensure_ascii=False),
         max_tokens=llm["max_tokens_chat"], temperature=llm["temp_chat"])
+    issues = response_issues(question, text)
+    if not issues:
+        return text, metrics
+
+    # Review only a detected regression, once. Keep the original source context;
+    # a previous generated draft is never evidence for the replacement answer.
+    metrics = dict(metrics)
+    review = {"initial_issues": issues, "status": "fallback"}
+    repair_policy = """\nCORRECTION OBLIGATOIRE DU BROUILLON :
+Le champ previous_draft est un texte généré qui a échoué aux contrôles. Il n'est
+pas une source factuelle. Réponds à nouveau à la question à partir des seules
+preuves originales. Corrige les violations signalées dans response_issues :
+- third_person : présente les contributions avec je/j'ai ou I/my.
+- internal_references : aucune référence codée ni citation entre crochets.
+- credential_absence : ne conclus jamais à la non-détention d'une certification.
+  Réponds que tu ne peux pas confirmer sa détention avec les informations disponibles ;
+  tu peux ensuite citer une qualification effectivement mentionnée, sans inventer
+  sa validité actuelle. Ne confonds pas une formation et une certification.
+- unsolicited_caveat : la question est une présentation générale d'expérience.
+  Présente le rôle réel et les contributions pertinentes uniquement. Aucun
+  inventaire de tâches techniques non réalisées, aucune phrase « pas de… »,
+  « plutôt que/rather than… », ni commentaire sur un SLA non demandé.
+Conserve les limites qui répondent à une demande précise. Ne change aucun fait
+pour corriger le style. Retourne uniquement la réponse finale, sans expliquer
+la correction ni citer le brouillon ou les noms de ces contrôles.
+"""
+    try:
+        repaired, repair_metrics = llm_complete(
+            model=llm["model"], system=CHAT_POLICY + repair_policy + "\n" + language_rule,
+            user_content=json.dumps(dict(payload, previous_draft=text, response_issues=issues), ensure_ascii=False),
+            max_tokens=llm["max_tokens_chat"], temperature=llm["temp_chat"])
+        for key in ("tokens_input", "tokens_output", "cout_usd", "latence_ms"):
+            metrics[key] = metrics.get(key, 0) + repair_metrics.get(key, 0)
+        remaining = response_issues(question, repaired)
+        review["remaining_issues"] = remaining
+        if not remaining:
+            review["status"] = "corrected"
+            text = repaired
+        else:
+            text = safe_fallback(language)
+    except Exception:
+        # Never expose provider errors or an invalid draft to the visitor.
+        review["error"] = "Q201"
+        text = safe_fallback(language)
+    return text, dict(metrics, response_review=review)
 
 def ask(question, language="fr", operational_context=None):
     if not isinstance(question, str) or not question.strip():

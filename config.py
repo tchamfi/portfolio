@@ -47,22 +47,22 @@ FALLBACK_CONFIG = {
 WELCOME_FR = """Bonjour ! Je suis l'assistant IA de Lionel TCHAMFONG.
 
 Posez-moi vos questions, par exemple :
-- "Quelle est son experience en data platforms ?"
-- "A-t-il deja travaille a l'international ?"
-- "Quelles certifications possede-t-il ?"
-- "Quel est son TJM et sa disponibilite ?"
+- "Quelle est votre expérience sur les plateformes data ?"
+- "Avez-vous déjà travaillé à l'international ?"
+- "Quelles certifications possédez-vous ?"
+- "Quel est votre TJM et quelle est votre disponibilité ?"
 
-Je réponds en me basant sur son parcours réel."""
+Je présente son parcours réel à la première personne."""
 
 WELCOME_EN = """Hello! I'm Lionel TCHAMFONG's AI assistant.
 
 Ask me anything, for example:
-- "What is his experience with data platforms?"
-- "Has he worked internationally?"
-- "What certifications does he hold?"
-- "What is his daily rate and availability?"
+- "What is your experience with data platforms?"
+- "Have you worked internationally?"
+- "What certifications do you hold?"
+- "What is your daily rate and availability?"
 
-I answer based on his actual career history."""
+I present his actual career history in the first person."""
 
 CHEVRON_SVG = '<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>'
 

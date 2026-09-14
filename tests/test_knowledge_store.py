@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import uuid
@@ -229,15 +231,40 @@ class KnowledgeStoreTests(unittest.TestCase):
     def test_bootstrap_is_idempotent_and_never_resurrects_archived_seed(self):
         self.assertTrue(ks.bootstrap_initial_facts())
         facts = ks.published_snapshot()["facts"]
-        self.assertEqual({"Jira", "Trello"}, {fact["title"] for fact in facts})
-        self.assertEqual(4, self.post.call_count)
+        self.assertEqual({"Jira", "Trello", "AWS — EyeCloud et SSP chez EssilorLuxottica"},
+                         {fact["title"] for fact in facts})
+        self.assertEqual(6, self.post.call_count)
         self.assertTrue(ks.bootstrap_initial_facts())
-        self.assertEqual(4, self.post.call_count)
+        self.assertEqual(6, self.post.call_count)
         jira = next(fact for fact in facts if fact["title"] == "Jira")
         ks.archive_fact(jira["id"], jira["revision"])
+        aws = next(fact for fact in facts if fact["id"] == "K617773657373")
+        edited = {field: aws[field] for field in ks.BUSINESS_FIELDS}
+        edited["statement"] += " Une précision éditoriale reste en brouillon."
+        draft = ks.save_draft(edited, aws["id"], aws["revision"])
+        writes = self.post.call_count
         ks._bootstrap_completed.clear()
         self.assertTrue(ks.bootstrap_initial_facts())
-        self.assertEqual(["Trello"], [fact["title"] for fact in ks.published_snapshot()["facts"]])
+        self.assertEqual(writes, self.post.call_count)
+        published = {fact["id"]: fact for fact in ks.published_snapshot()["facts"]}
+        self.assertEqual({"K7472656c6c6f", aws["id"]}, set(published))
+        self.assertEqual(aws["statement"], published[aws["id"]]["statement"])
+        current = next(fact for fact in ks.list_facts() if fact["id"] == aws["id"])
+        self.assertEqual(draft["revision"], current["revision"])
+        self.assertEqual("draft", current["state"])
+        self.assertEqual(edited["statement"], current["statement"])
+
+    def test_bootstrap_rejects_a_stale_aws_source_correction_before_writing(self):
+        seeds = json.loads(ks.INITIAL_FACTS_PATH.read_text(encoding="utf-8"))
+        aws = next(item for item in seeds if item["id"] == "K617773657373")
+        aws["fields"]["correction_quote"] = "Un ancien passage AWS qui ne figure plus dans le référentiel."
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "initial_facts.json"
+            path.write_text(json.dumps([aws], ensure_ascii=False), encoding="utf-8")
+            with patch.object(ks, "INITIAL_FACTS_PATH", path), self.assertRaises(ValueError):
+                ks.bootstrap_initial_facts()
+        self.post.assert_not_called()
+        self.assertEqual([], ks.published_snapshot()["facts"])
 
     def test_reserved_knowledge_records_never_leak_into_editorial_config(self):
         record = {"id": "recPrivate", "fields": {"Name": ks.KNOWLEDGE_PREFIX + "K123456789012:test", "Notes": "private fact"}}

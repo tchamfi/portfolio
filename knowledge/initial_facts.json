@@ -1,0 +1,41 @@
+[
+  {
+    "id": "K6a6972610001",
+    "fields": {
+      "kind": "tool",
+      "title": "Jira",
+      "companies": ["GRDF", "BNP Paribas Personal Finance"],
+      "statement": "J’ai utilisé Jira chez GRDF et je l’utilise actuellement chez BNP Paribas Personal Finance.",
+      "practice": "professional",
+      "keywords": ["Jira"],
+      "limits": "Fonctions avancées et durée précise non renseignées."
+    }
+  },
+  {
+    "id": "K7472656c6c6f",
+    "fields": {
+      "kind": "tool",
+      "title": "Trello",
+      "companies": ["Enedis"],
+      "statement": "J’ai utilisé Trello chez Enedis.",
+      "practice": "professional",
+      "keywords": ["Trello"],
+      "limits": "Fonctions avancées et durée précise non renseignées."
+    }
+  },
+  {
+    "id": "K617773657373",
+    "fields": {
+      "kind": "skill",
+      "title": "AWS — EyeCloud et SSP chez EssilorLuxottica",
+      "companies": ["EssilorLuxottica"],
+      "statement": "Chez EssilorLuxottica, j’ai été Product Owner de deux produits hébergés sur AWS : EyeCloud, l’API de stockage de données sensibles, et SSP (Self Service Platform), l’application web d’administration de la plateforme de calcul des verres Essilor. Je pilotais ces produits et leurs évolutions en lien avec les équipes techniques.\n\nPour EyeCloud, j’ai piloté l’évolution de l’API autour des enjeux d’intégrité, de confidentialité et de disponibilité des données utilisées au cours du cycle de production. L’architecture mise en place était multi-région, en Irlande et au Canada. Dans chaque région, API Gateway était associé à un Application Load Balancer (ALB), avec un Auto Scaling Group (ASG) pour l’API. Le schéma comporte un service d’autorisation AuthZ associé à PostgreSQL. Le stockage utilisait Amazon S3 avec réplication entre les régions et Amazon DynamoDB avec une Global Table répliquée entre les deux régions.\n\nPour SSP, je pilotais une application d’administration permettant de configurer la plateforme de calcul des verres et de visualiser les informations utiles aux processus de production. Son frontend Angular et son backend ASP.NET étaient hébergés sur des instances Amazon EC2, organisées en Auto Scaling Groups (ASG), avec des Application Load Balancers (ALB) pour répartir la charge. L’application accédait à une base d’administration et à des données de bases partenaires via des API.\n\nLes deux produits, EyeCloud et SSP, bénéficiaient également d’AWS WAF pour la protection des applications web. Mon expérience AWS couvre donc le pilotage d’une API de données sensibles et d’une application web d’administration, dans des environnements intégrant hébergement EC2, élasticité, répartition de charge, stockage, réplication et sécurité applicative.",
+      "practice": "professional",
+      "period": "Mission EssilorLuxottica : juin 2019 – décembre 2024 ; dates propres à chaque composant non précisées.",
+      "limits": "Contribution professionnelle de Product Owner dans cet environnement technique ; ne pas la transformer en réalisation personnelle de l’architecture, de la configuration AWS ou du développement Angular/ASP.NET. Les dates de la mission ne donnent pas la durée d’utilisation de chaque service. Source EyeCloud : schéma d’architecture mis en place, fourni par Lionel et déclaré non confidentiel (HAMR API on AWS, page 11), et ses précisions directes. Source SSP et AWS WAF sur les deux produits : précisions directes de Lionel ; le WAF n’est pas dessiné sur le schéma EyeCloud. Ne pas attribuer la topologie multi-région, S3, DynamoDB, API Gateway ou PostgreSQL à SSP sur la seule base de ce schéma. Le moteur de la base d’administration et des bases partenaires de SSP n’est pas précisé. Aucun SLA mesuré, mode de bascule, délai de réplication ou garantie absolue de sécurité n’est ajouté.",
+      "keywords": ["AWS", "EyeCloud", "SSP", "Self Service Platform", "Essilor", "Product Owner", "Angular", "ASP.NET", "EC2", "ASG", "Auto Scaling Group", "ALB", "Application Load Balancer", "API Gateway", "S3", "DynamoDB", "Global Table", "réplication", "multi-région", "Irlande", "Canada", "AuthZ", "PostgreSQL", "WAF"],
+      "correction_of": "C17",
+      "correction_quote": "Chez EssilorLuxottica, Lionel a piloté une application d’administration de plateforme de calcul et l’évolution d’une API de stockage de données sensibles. Son profil décrit le pilotage d’une nouvelle version d’API fondée sur une architecture AWS multi-région, avec des objectifs de robustesse, sécurité et haute disponibilité."
+    }
+  }
+]

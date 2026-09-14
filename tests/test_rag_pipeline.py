@@ -358,6 +358,74 @@ class PublishedKnowledgeIntegrationTests(unittest.TestCase):
                 "keywords": ["Jira"], "correction_of": "", "correction_quote": "",
                 "source": "Précision confirmée par Lionel", "state": "published", "revision": "first", **overrides}
 
+    def aws_fact(self):
+        seeds = json.loads((doc_loader.KNOWLEDGE_PATH.parent / "initial_facts.json").read_text(encoding="utf-8"))
+        seed = next(item for item in seeds if item["id"] == "K617773657373")
+        return self.fact(id=seed["id"], **seed["fields"])
+
+    def test_aws_publication_enriches_only_its_source_scope_and_preserves_po_attribution(self):
+        before_status = rag.get_knowledge_status()
+        before = {chunk["id"]: chunk for chunk in rag.get_evidence_by_ids(["C17", "C18"])}
+        self.published = [self.aws_fact()]
+        fact = self.published[0]
+        after_status = rag.get_knowledge_status()
+        after = {chunk["id"]: chunk for chunk in rag.get_evidence_by_ids(["C17", "C18", fact["id"]])}
+        self.assertNotEqual(before_status["fingerprint"], after_status["fingerprint"])
+        self.assertNotEqual(before_status["reference_fingerprint"], after_status["reference_fingerprint"])
+        self.assertEqual(before["C18"]["text"], after["C18"]["text"])
+        self.assertNotIn(fact["correction_quote"], after["C17"]["text"])
+        self.assertIn(fact["statement"], after["C17"]["text"])
+        self.assertIn("La roadmap du chantier cloud", after["C17"]["text"])
+        self.assertIn("ne pas attribuer un SLA chiffré", after["C17"]["text"])
+        self.assertEqual(before["C17"]["metadata"]["role"], after["C17"]["metadata"]["role"])
+        self.assertTrue({"L05", "D05", "D07", fact["id"]}.issubset(after["C17"]["metadata"]["source_refs"]))
+        self.assertIn(fact["limits"], after[fact["id"]]["text"])
+        for term in ("AWS", "EyeCloud", "SSP"):
+            self.assertIn(term, fact["statement"][:700])
+        for term in ("Angular", "ASP.NET", "EC2", "ASG", "ALB", "API Gateway", "DynamoDB", "S3", "WAF", "PostgreSQL"):
+            self.assertIn(term, after[fact["id"]]["text"])
+
+    def test_aws_products_reach_chat_and_matching_as_complete_attributable_evidence(self):
+        self.published = [self.aws_fact()]
+        fact = self.published[0]
+        aws_ids = {"C17", fact["id"]}
+        questions = (
+            "quel est votre experience sur aws ?",
+            "Quelle expérience SSP Angular ASP.NET EC2 ASG ALB ?",
+            "EyeCloud API Gateway DynamoDB S3 WAF",
+        )
+        for question in questions:
+            with self.subTest(question=question):
+                found = rag.search_evidence(question, top_k=8)
+                relevant = [chunk for chunk in found if chunk["id"] in aws_ids]
+                self.assertTrue(relevant, [chunk["id"] for chunk in found])
+                for chunk in relevant:
+                    self.assertIn(fact["statement"], chunk["text"])
+                    self.assertIn(fact["id"], chunk["metadata"]["source_refs"])
+
+        def select(**kwargs):
+            payload = json.loads(kwargs["user_content"])
+            if "catalog" not in payload:
+                self.assertIn(fact["statement"], payload["knowledge_excerpts"])
+                return "J’ai piloté EyeCloud et SSP, deux produits hébergés sur AWS chez EssilorLuxottica.", {}
+            return json.dumps({"results": [{"requirement_id": req["id"],
+                                            "evidence_ids": [fact["id"], "C17"]}
+                                           for req in payload["requirements"]]}), {"tokens_input": 10}
+
+        with patch.object(rag, "_get_llm_config", return_value=LLM_CONFIG), \
+             patch.object(rag, "llm_complete", side_effect=select), \
+             patch("hybrid_retrieval.llm_complete", side_effect=select):
+            _, chat_metrics = rag.ask(questions[0])
+            evidence, matching_metrics = rag.search_matching_evidence(
+                [{"id": "R01", "text": "Pilotage de produits AWS avec EC2, ASG, ALB et WAF"}], "test")
+        matching_aws = [chunk for chunk in evidence["R01"] if chunk["id"] in aws_ids]
+        self.assertTrue(matching_aws)
+        for chunk in matching_aws:
+            self.assertIn(fact["statement"], chunk["text"])
+            self.assertIn(fact["id"], chunk["metadata"]["source_refs"])
+        self.assertTrue(aws_ids.intersection(chat_metrics["evidence_ids"]))
+        self.assertEqual(chat_metrics["corpus_fingerprint"], matching_metrics["corpus_fingerprint"])
+
     def test_published_tool_updates_common_corpus_and_both_content_fingerprints(self):
         before = rag.get_knowledge_status()
         self.published = [self.fact()]
